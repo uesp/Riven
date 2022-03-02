@@ -168,7 +168,7 @@ class Riven
             $first = $separator[0];
             if (in_array($first, ['\'', '`', '"']) && $first === substr($separator, -1, 1)) {
                 $separator = substr($separator, 1, -1);
-                $parser->addTrackingCategory('metatemplate-pickfromquotes-category');
+                $parser->addTrackingCategory('riven-pickfromquotes-category');
             }
         }
 

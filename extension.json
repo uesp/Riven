@@ -26,5 +26,8 @@
 		"ParserFirstCallInit": "RivenHooks::onParserFirstCallInit",
 		"ParserGetVariableValueSwitch": "RivenHooks::onParserGetVariableValueSwitch"
 	},
+	"TrackingCategories": [
+		"riven-pickfromquotes-category"
+	],
 	"manifest_version": 1
 }
