@@ -10,7 +10,7 @@ $magicWords['en'] = [
 	Riven::PF_INCLUDE => [0, 'include'],
 	Riven::PF_PICKFROM => [0, 'pickfrom'],
 	Riven::PF_RAND => [0, 'rand'],
-	Riven::PF_SPLITARGS => [0, 'splitargs'],
+	Riven::PF_SPLITARGS => [0, 'splitargs', 'explodeargs'],
 	Riven::PF_TRIMLINKS => [0, 'trimlinks'],
 	Riven::VR_SKINNAME => [0, 'SKINNAME'],
 ];
