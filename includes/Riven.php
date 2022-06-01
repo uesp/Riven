@@ -263,39 +263,40 @@ class Riven
             self::NA_SEPARATOR
         );
 
-        // Figure out what we're dealing with and populate appropriately.
-        $checkFormat = $frame->expand($values[1]);
-        if (!is_numeric($checkFormat) && count($values) > 3) {
-            // Old #explodeargs; can be deleted once all are converted.
-            $values = ParserHelper::expandArray($frame, $values);
-            $nargs = intval($values[3]);
-            $templateName = $values[2];
-            $separator = $checkFormat;
-            $values = explode($separator, $values[0]);
-            $parser->addTrackingCategory('metatemplate-tracking-explodeargs');
-            $nowiki = false;
-        } else {
-            $nowiki = ParserHelper::arrayGet($magicArgs, self::NA_NOWIKI, false);
-            $nowiki = $parser->getOptions()->getIsPreview() ? boolval($nowiki) : in_array($nowiki, ParserHelper::getMagicWordNames(ParserHelper::AV_ALWAYS));
-            $templateName = $frame->expand($values[0]);
-            $nargs = intval($checkFormat);
-            $values = array_slice($values, 2);
-            if (isset($magicArgs[self::NA_EXPLODE])) {
-                $separator = ParserHelper::arrayGet($magicArgs, self::NA_SEPARATOR, ',');
-                $values = array_merge(explode($separator, $magicArgs[self::NA_EXPLODE]), $values);
-            }
+        if (isset($values[1])) {
+            // Figure out what we're dealing with and populate appropriately.
+            $checkFormat = $frame->expand($values[1]);
+            if (!is_numeric($checkFormat) && count($values) > 3) {
+                // Old #explodeargs; can be deleted once all are converted.
+                $values = ParserHelper::expandArray($frame, $values);
+                $nargs = $frame->expand($values[3]);
+                $templateName = $values[2];
+                $separator = $checkFormat;
+                $values = explode($separator, $frame->expand($values[0]));
+                $parser->addTrackingCategory('metatemplate-tracking-explodeargs');
+            } else {
+                $templateName = $values[0];
+                $nargs = $checkFormat;
+                $values = array_slice($values, 2);
+                if (isset($magicArgs[self::NA_EXPLODE])) {
+                    $separator = ParserHelper::arrayGet($magicArgs, self::NA_SEPARATOR, ',');
+                    $explode = $frame->expand($magicArgs[self::NA_EXPLODE]);
+                    $values = array_merge(explode($separator, $explode), $values);
+                }
 
-            if (empty($values)) {
-                $values = $frame->getNumberedArguments();
-                foreach ($frame->getNamedArguments() as $key => $value) {
-                    $numKey = intval($key);
-                    if ($numKey > 0) {
-                        $values[$numKey] = $value;
+                if (empty($values)) {
+                    $values = $frame->getNumberedArguments();
+                    foreach ($frame->getNamedArguments() as $key => $value) {
+                        $numKey = intval($key);
+                        if ($numKey > 0) {
+                            $values[$numKey] = $value;
+                        }
                     }
                 }
             }
         }
 
+        $nargs = intval($nargs);
         if ($nargs == 0) {
             $nargs = count($values);
         }
@@ -304,7 +305,7 @@ class Riven
         if (count($values) > 0) {
             $templates = [];
             for ($index = 0; $index < count($values); $index += $nargs) {
-                $newTemplate = self::createTemplateNode($templateName);
+                $newTemplate = self::createTemplateNode($frame->expand($templateName));
                 for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
                     $var = ParserHelper::arrayGet($values, $index + $paramNum, '');
                     $param = self::createPartNode($paramNum + 1, $var, true);
@@ -319,6 +320,8 @@ class Riven
                 $templates[] = $newTemplate;
             }
 
+            $nowiki = ParserHelper::arrayGet($magicArgs, self::NA_NOWIKI, false);
+            $nowiki = $parser->getOptions()->getIsPreview() ? boolval($nowiki) : in_array($nowiki, ParserHelper::getMagicWordNames(ParserHelper::AV_ALWAYS));
             return $frame->expand($templates, $nowiki ? PPFrame::RECOVER_ORIG : 0);
         }
     }
