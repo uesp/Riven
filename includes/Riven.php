@@ -89,15 +89,17 @@ class Riven
     {
         $prevNode = null;
         while ($node) {
-            if ($node instanceof PPNode_Hash_Text && strlen(trim($node->value)) == 0) {
-                $node->value = '';
-            } elseif ((!$node instanceof PPNode_Hash_Text || self::IsLink($node)) && ($prevNode instanceof PPNode_Hash_Text)) {
-                $prevNode->value = preg_replace('/(</?[0-9A-Za-z]+[^>]*>|\]\])\s+$/', '$1', $prevNode->value);
-            } elseif ($node instanceof PPNode_Hash_Text && (!$prevNode instanceof PPNode_Hash_Text || self::IsLink($prevNode))) {
-                $node->value = preg_replace('/(\]\])\s+?(</?[0-9A-Za-z]+[^>]*>)\s+$/', '$1$2', $node->value);
-            }
-
-            if ($recurse && $node instanceof PPNode_Hash_Tree) {
+            if (self::isLink($node)) {
+                if ($prevNode instanceof PPNode_Hash_Text) {
+                    $prevNode->value = preg_replace('/(</?[0-9A-Za-z]+[^>]*>|\]\])\s+$/', '$1', $prevNode->value);
+                }
+            } elseif ($node instanceof PPNode_Hash_Text) {
+                if (strlen(trim($node->value)) == 0) {
+                    $node->value = '';
+                } elseif (self::IsLink($prevNode) || !$prevNode instanceof PPNode_Hash_Text) {
+                    $node->value = preg_replace('/(\]\])\s+?(</?[0-9A-Za-z]+[^>]*>)\s+$/', '$1$2', $node->value);
+                }
+            } elseif ($recurse) {
                 self::cleanSpaceNode($node->getFirstChild(), true);
             }
 
@@ -155,33 +157,40 @@ class Riven
             $else = ParserHelper::arrayGet($values, 2);
             $retval = $else;
             $parser->getFunctionLang()->findVariantLink($titleText, $title, true);
-            $ns = $title->getNamespace();
-            if ($ns === NS_MEDIA) {
-                if ($parser->incrementExpensiveFunctionCount()) {
-                    $file = wfFindFile($title);
-                    if ($file) {
-                        $parser->mOutput->addImage(
-                            $file->getName(),
-                            $file->getTimestamp(),
-                            $file->getSha1()
-                        );
+            switch ($title->getNamespace()) {
+                case NS_MEDIA:
+                    if ($parser->incrementExpensiveFunctionCount()) {
+                        $file = wfFindFile($title);
+                        if ($file) {
+                            $parser->mOutput->addImage(
+                                $file->getName(),
+                                $file->getTimestamp(),
+                                $file->getSha1()
+                            );
 
-                        $retval = $file->exists() ? $then : $else;
+                            $retval = $file->exists() ? $then : $else;
+                        }
                     }
-                }
-            } elseif ($ns === NS_SPECIAL) {
-                $retval = SpecialPageFactory::exists($title->getDBkey()) ? $then : $else;
-            } elseif (!$title->isExternal()) {
-                $pdbk = $title->getPrefixedDBkey();
-                $lc = LinkCache::singleton();
-                if (
-                    $lc->getGoodLinkID($pdbk) !== 0 ||
-                    (!$lc->isBadLink($pdbk) &&
-                        $parser->incrementExpensiveFunctionCount() &&
-                        $title->exists())
-                ) {
-                    $retval = $then;
-                }
+
+                    break;
+                case NS_SPECIAL:
+                    $retval = SpecialPageFactory::exists($title->getDBkey()) ? $then : $else;
+                    break;
+                default:
+                    if (!$title->isExternal()) {
+                        $pdbk = $title->getPrefixedDBkey();
+                        $lc = LinkCache::singleton();
+                        if (
+                            $lc->getGoodLinkID($pdbk) !== 0 ||
+                            (!$lc->isBadLink($pdbk) &&
+                                $parser->incrementExpensiveFunctionCount() &&
+                                $title->exists())
+                        ) {
+                            $retval = $then;
+                        }
+                    }
+
+                    break;
             }
         }
 
