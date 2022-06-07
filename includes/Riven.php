@@ -85,49 +85,6 @@ class Riven
         return $text;
     }
 
-    private static function cleanSpaceNode(PPNode $node, $recurse)
-    {
-        $prevNode = null;
-        while ($node) {
-            if (self::isLink($node)) {
-                if ($prevNode instanceof PPNode_Hash_Text) {
-                    $prevNode->value = preg_replace('/(</?[0-9A-Za-z]+[^>]*>|\]\])\s+$/', '$1', $prevNode->value);
-                }
-            } elseif ($node instanceof PPNode_Hash_Text) {
-                if (strlen(trim($node->value)) == 0) {
-                    $node->value = '';
-                } elseif (self::IsLink($prevNode) || !$prevNode instanceof PPNode_Hash_Text) {
-                    $node->value = preg_replace('/(\]\])\s+?(</?[0-9A-Za-z]+[^>]*>)\s+$/', '$1$2', $node->value);
-                }
-            } elseif ($recurse) {
-                self::cleanSpaceNode($node->getFirstChild(), true);
-            }
-
-            $prevNode = $node;
-            $node = $node->getNextSibling();
-        }
-    }
-
-    private static function cleanSpaceOriginal($text, PPFrame $frame)
-    {
-        return preg_replace('/([\]\}\>])\s+([\<\{\[])/s', '$1$2', $text);
-    }
-
-    private static function CleanSpacePP($text, Parser $parser, PPFrame $frame, $recurse)
-    {
-        $preprocessor = new Preprocessor_Hash($parser);
-        $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
-        $rootNode = $preprocessor->preprocessToObj($text, $flag);
-        self::cleanSpaceNode($rootNode->getFirstChild(), $recurse);
-
-        return $frame->expand($rootNode, PPFrame::RECOVER_ORIG);
-    }
-
-    private static function isLink(PPNode $node = null)
-    {
-        return $node instanceof PPNode_Hash_Text && $node->value == '[[';
-    }
-
     public static function doCleanTable($text, $args = array(), $parser, $frame)
     {
         return 'This table is no more!';
@@ -445,6 +402,44 @@ class Riven
         ParserHelper::cacheMagicWords(self::$allMagicWords);
     }
 
+    private static function cleanSpaceNode(PPNode $node, $recurse)
+    {
+        $prevNode = null;
+        while ($node) {
+            if (self::isLink($node)) {
+                if ($prevNode instanceof PPNode_Hash_Text) {
+                    $prevNode->value = preg_replace('/(</?[0-9A-Za-z]+[^>]*>|\]\])\s+$/', '$1', $prevNode->value);
+                }
+            } elseif ($node instanceof PPNode_Hash_Text) {
+                if (strlen(trim($node->value)) == 0) {
+                    $node->value = '';
+                } elseif (self::IsLink($prevNode) || !$prevNode instanceof PPNode_Hash_Text) {
+                    $node->value = preg_replace('/(\]\])\s+?(</?[0-9A-Za-z]+[^>]*>)\s+$/', '$1$2', $node->value);
+                }
+            } elseif ($recurse) {
+                self::cleanSpaceNode($node->getFirstChild(), true);
+            }
+
+            $prevNode = $node;
+            $node = $node->getNextSibling();
+        }
+    }
+
+    private static function cleanSpaceOriginal($text, PPFrame $frame)
+    {
+        return preg_replace('/([\]\}\>])\s+([\<\{\[])/s', '$1$2', $text);
+    }
+
+    private static function CleanSpacePP($text, Parser $parser, PPFrame $frame, $recurse)
+    {
+        $preprocessor = new Preprocessor_Hash($parser);
+        $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
+        $rootNode = $preprocessor->preprocessToObj($text, $flag);
+        self::cleanSpaceNode($rootNode->getFirstChild(), $recurse);
+
+        return $frame->expand($rootNode, PPFrame::RECOVER_ORIG);
+    }
+
     /**
      * createPartNode
      *
@@ -567,5 +562,10 @@ class Riven
                 $child = $child->getNextSibling();
             }
         }
+    }
+
+    private static function isLink(PPNode $node = null)
+    {
+        return $node instanceof PPNode_Hash_Text && $node->value == '[[';
     }
 }
