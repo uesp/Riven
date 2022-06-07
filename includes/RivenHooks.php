@@ -9,6 +9,13 @@ use MediaWiki\MediaWikiServices;
  */
 class RivenHooks
 {
+	private static $tagInfo = [
+		Riven::TG_CLEANSPACE => 'Riven::doCleanSpace',
+		Riven::TG_CLEANTABLE => 'Riven::doCleanTable'
+	];
+
+	private static $doOnce = true;
+
 	// This is the best place to disable individual magic words;
 	// To disable all magic words, disable the hook that calls this function
 	/**
@@ -33,12 +40,15 @@ class RivenHooks
 	 */
 	public static function onParserFirstCallInit(Parser $parser)
 	{
-		self::initParserFunctions($parser);
-		self::initTagFunctions($parser);
-		ParserHelper::init();
-		Riven::init();
-	}
+		if (true) {
+			self::$doOnce = false;
 
+			ParserHelper::init();
+			self::initParserFunctions($parser);
+			self::initTagFunctions($parser);
+			Riven::init();
+		}
+	}
 	/**
 	 * onParserGetVariableValueSwitch
 	 *
@@ -87,8 +97,8 @@ class RivenHooks
 	 */
 	private static function initTagFunctions(Parser $parser)
 	{
-		// $parser->setHook(Riven::TG_CLEANSPACE, 'efMetaTemplateCleanspace');
-		// $parser->setHook(Riven::TG_CLEANTABLE, 'efMetaTemplateCleantable');
-		// $parser->setHook(Riven::TG_DISPLAYCODE, 'efMetaTemplateDisplaycode');
+		foreach (self::$tagInfo as $k => $v) {
+			ParserHelper::setAllSynonyms($parser, $k, $v);
+		}
 	}
 }

@@ -22,7 +22,6 @@ class Riven
     const PF_TRIMLINKS = 'riven-trimlinks';
     const TG_CLEANSPACE = 'riven-cleanspace';
     const TG_CLEANTABLE = 'riven-cleantable';
-    const TG_DISPLAYCODE = 'riven-displaycode';
     const VR_SKINNAME = 'riven-skinname'; // From DynamicFunctions
 
     private static $allMagicWords = [
@@ -47,6 +46,89 @@ class Riven
         $values = ParserHelper::expandArray($frame, $args);
         $request = RequestContext::getMain()->getRequest();
         return $request->getVal($values[0], isset($values[1]) ? $values[1] : '');
+    }
+
+    public static function doCleanSpace($text, array $args = array(), Parser $parser, PPFrame $frame)
+    {
+        $debug = ParserHelper::arrayGet($args, 'debug');
+        $mode = ParserHelper::arrayGet($args, 'mode');
+        $isPreview = $parser->getOptions()->getIsPreview();
+        $text = trim($text);
+
+        switch ($mode) {
+            case 'recursive':
+                $text = self::cleanSpacePP($text, $parser, $frame, true);
+                break;
+            case 'top':
+                $text = self::cleanSpacePP($text, $parser, $frame, false);
+                break;
+            default:
+                $text = self::cleanSpaceOriginal($text, $frame);
+        }
+
+        if ($debug && $isPreview) {
+            return ['<pre>' . htmlspecialchars($text) . '</pre>', 'markerType' => 'nowiki'];
+        }
+
+        if (!$isPreview && $parser->getTitle()->getNamespace() == NS_TEMPLATE) {
+            // categories and trails are stripped on ''any'' template page, not just when directly calling the template
+            // (but only in non-preview mode)
+            // save categories before processing
+            $precats = $parser->mOutput->getCategories();
+            $text = $parser->recursiveTagParse($text, $frame);
+            // reset categories to the pre-processing list to remove any new categories
+            $parser->mOutput->setCategoryLinks($precats);
+        } else {
+            $text = $parser->recursiveTagParse($text, $frame);
+        }
+
+        return $text;
+    }
+
+    private static function cleanSpaceNode(PPNode $node, $recurse)
+    {
+        $prevNode = null;
+        while ($node) {
+            if ($node instanceof PPNode_Hash_Text && strlen(trim($node->value)) == 0) {
+                $node->value = '';
+            } elseif ((!$node instanceof PPNode_Hash_Text || self::IsLink($node)) && ($prevNode instanceof PPNode_Hash_Text)) {
+                $prevNode->value = preg_replace('/(</?[0-9A-Za-z]+[^>]*>|\]\])\s+$/', '$1', $prevNode->value);
+            } elseif ($node instanceof PPNode_Hash_Text && (!$prevNode instanceof PPNode_Hash_Text || self::IsLink($prevNode))) {
+                $node->value = preg_replace('/(\]\])\s+?(</?[0-9A-Za-z]+[^>]*>)\s+$/', '$1$2', $node->value);
+            }
+
+            if ($recurse && $node instanceof PPNode_Hash_Tree) {
+                self::cleanSpaceNode($node->getFirstChild(), true);
+            }
+
+            $prevNode = $node;
+            $node = $node->getNextSibling();
+        }
+    }
+
+    private static function cleanSpaceOriginal($text, PPFrame $frame)
+    {
+        return preg_replace('/([\]\}\>])\s+([\<\{\[])/s', '$1$2', $text);
+    }
+
+    private static function CleanSpacePP($text, Parser $parser, PPFrame $frame, $recurse)
+    {
+        $preprocessor = new Preprocessor_Hash($parser);
+        $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
+        $rootNode = $preprocessor->preprocessToObj($text, $flag);
+        self::cleanSpaceNode($rootNode->getFirstChild(), $recurse);
+
+        return $frame->expand($rootNode, PPFrame::RECOVER_ORIG);
+    }
+
+    private static function isLink(PPNode $node = null)
+    {
+        return $node instanceof PPNode_Hash_Text && $node->value == '[[';
+    }
+
+    public static function doCleanTable($text, $args = array(), $parser, $frame)
+    {
+        return 'This table is no more!';
     }
 
     /**
@@ -343,7 +425,8 @@ class Riven
         }
 
         $preprocessor = new Preprocessor_Hash($parser);
-        $rootNode = $preprocessor->preprocessToObj($args[0], 1);
+        $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
+        $rootNode = $preprocessor->preprocessToObj($args[0], $flag);
         self::trimLinksParseNode($parser, $rootNode);
         return $frame->expand($rootNode);
     }
