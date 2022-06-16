@@ -406,17 +406,16 @@ class Riven
     {
         $prevNode = null;
         while ($node) {
-            if (self::isLink($node)) {
-                if ($prevNode instanceof PPNode_Hash_Text) {
-                    $prevNode->value = preg_replace('/(</?[0-9A-Za-z]+[^>]*>|\]\])\s+$/', '$1', $prevNode->value);
+            if ($node instanceof PPNode_Hash_Text) {
+                // Remove space at beginning and end of text, and around anything that looks like a valid tag.
+                $trimmed = preg_replace('#\s*(</?[0-9A-Za-z]+[^>]*>)\s*#', '$1', trim($node->value));
+                if (self::isLink($prevNode)) {
+                    // Also remove space after a link's closing ]]. Only do this once - anything else is not a link closer.
+                    $trimmed = preg_replace('#]]\s+#', ']]', $trimmed, 1);
                 }
-            } elseif ($node instanceof PPNode_Hash_Text) {
-                if (strlen(trim($node->value)) == 0) {
-                    $node->value = '';
-                } elseif (self::IsLink($prevNode) || !$prevNode instanceof PPNode_Hash_Text) {
-                    $node->value = preg_replace('/(\]\])\s+?(</?[0-9A-Za-z]+[^>]*>)\s+$/', '$1$2', $node->value);
-                }
-            } elseif ($recurse) {
+
+                $node->value = $trimmed;
+            } elseif ($recurse && $node->getFirstChild()) {
                 self::cleanSpaceNode($node->getFirstChild(), true);
             }
 
