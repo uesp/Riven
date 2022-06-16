@@ -63,7 +63,7 @@ class Riven
                 $text = self::cleanSpacePP($text, $parser, $frame, false);
                 break;
             default:
-                $text = self::cleanSpaceOriginal($text, $frame);
+                $text = self::cleanSpaceOriginal($text);
         }
 
         if ($debug && $isPreview) {
@@ -74,10 +74,10 @@ class Riven
             // categories and trails are stripped on ''any'' template page, not just when directly calling the template
             // (but only in non-preview mode)
             // save categories before processing
-            $precats = $parser->mOutput->getCategories();
+            $precats = $parser->getOutput()->getCategories();
             $text = $parser->recursiveTagParse($text, $frame);
             // reset categories to the pre-processing list to remove any new categories
-            $parser->mOutput->setCategoryLinks($precats);
+            $parser->getOutput()->setCategoryLinks($precats);
         } else {
             $text = $parser->recursiveTagParse($text, $frame);
         }
@@ -119,7 +119,7 @@ class Riven
                     if ($parser->incrementExpensiveFunctionCount()) {
                         $file = wfFindFile($title);
                         if ($file) {
-                            $parser->mOutput->addImage(
+                            $parser->getOutput()->addImage(
                                 $file->getName(),
                                 $file->getTimestamp(),
                                 $file->getSha1()
@@ -424,12 +424,12 @@ class Riven
         }
     }
 
-    private static function cleanSpaceOriginal($text, PPFrame $frame)
+    private static function cleanSpaceOriginal($text)
     {
         return preg_replace('/([\]\}\>])\s+([\<\{\[])/s', '$1$2', $text);
     }
 
-    private static function CleanSpacePP($text, Parser $parser, PPFrame $frame, $recurse)
+    private static function cleanSpacePP($text, Parser $parser, PPFrame $frame, $recurse)
     {
         $preprocessor = new Preprocessor_Hash($parser);
         $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
