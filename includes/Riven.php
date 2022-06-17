@@ -85,10 +85,125 @@ class Riven
         return $text;
     }
 
-    public static function doCleanTable($text, $args = array(), $parser, $frame)
+    private static function getInternalsCount(Parser $parser)
     {
-        return 'This table is no more!';
+        // Because this is delving into two levels of public-but-really-private properties and there are no equivalent
+        // method calls to do this, we put it into its own function so it can readily be replaced if needed.
+        return isset($parser->mLinkHolders->internals)
+            ? count($parser->mLinkHolders->internals)
+            : 0;
     }
+
+    // need to handle nested tables better
+    // unset links that are removed (remove from wantedlinks)?
+    // fix issues with <small> tags ... if cell is empty except for paired tags, consider it empty
+    public static function doCleanTable($text, $args = array(), Parser $parser, PPFrame $frame)
+    {
+        $initialLinks = self::getInternalsCount($parser);
+        $input = $parser->recursiveTagParse($text, $frame);
+
+        // This ensures that tables are not toClean if being displayed directly on the Template page.
+        // Note that previewing will process cleantable normally.
+        if (
+            $parser->getTitle()->getNamespace() == NS_TEMPLATE &&
+            $frame->depth == 0 &&
+            !$parser->getOptions()->getIsPreview()
+        ) {
+            return $input;
+        }
+
+        // Don't bother to waste CPU doing preg_matches on 'a href' if:
+        // * there aren't any links to start with
+        // * if the parser structure has changed and mLinks is no longer where data is stored, or
+        // * if no links were added by tag contents.
+        $dolinks = self::getInternalsCount($parser) > $initialLinks;
+
+        $offset = 0;
+        $output = '';
+        $lastVal = null;
+        do {
+            $lastVal = self::parseTable($parser, $input, $offset);
+            $output .= $lastVal;
+            show($offset, '/', strlen($input));
+        } while ($offset < strlen($input));
+
+        $output .= substr($input, $offset);
+        show("Input:\n", $input, "\n\nOutput:\n", $output);
+
+        return [$output, 'markerType' => 'nowiki'];
+    }
+
+    private static function parseTable(Parser $parser, $input, &$offset, $open = null)
+    {
+        $output = '';
+        $close = ['', -1];
+        while (preg_match('#<(/?table)[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
+            $match = $matches[0];
+            $tag = $matches[1][0];
+            if (is_null($open)) {
+                $open = $match;
+            }
+
+            // show("Match $tag found at: ", (string)$match[1]);
+            if ($tag == 'table') {
+                $output .= substr($input, $offset, $match[1] - $offset);
+                $offset = $match[1] + strlen($match[0]);
+                $output .= self::parseTable($parser, $input, $offset, $match);
+                // show("Parsed Table:\n", $cleaned);
+            } else {
+                $close = $match;
+                // $output .= substr($input, $offset, $match[1] - $offset);
+                $output .= '<b>Table wuz here</b>';
+                $offset = $match[1] + strlen($match[0]);
+                break;
+            }
+        }
+
+        $output = $open[0] . $output . $close[0];
+        if (strlen($output)) {
+            $output = $parser->insertStripItem($output);
+        }
+
+        show('Output: ', $output);
+        return $output;
+    }
+
+    /*
+            // Delimiter starting new table
+                $nTable++;
+                $tableStack[$nTable] = $currentText;
+                $subTables[$nTable] = array();
+
+            // Delimiter ending current table
+            elseif (strtolower(substr($currentText, 0, 7)) == '</table') {
+                $tableStack[$nTable] .= $currentText;
+                $toClean = efMetaTemplateDoCleantable($tableStack[$nTable], $dolinks, $parser);
+
+                // I could check here for empty tables (<table[^>]*>\s+</table>) and delete them... but is that what should be done?
+                $demangled = '';
+                $mlast = 0;
+                for ($isub = 0; $isub < count($subTables[$nTable]); $isub++) {
+                    $mloc = strpos($toClean, $marker, $mlast);
+                    $demangled .= substr($toClean, $mlast, $mloc - $mlast);
+                    $demangled .= $subTables[$nTable][$isub];
+                    $mlast = $mloc + $markerLen;
+                }
+                $demangled .= substr($toClean, $mlast);
+
+                unset($tablestack[$nTable]);
+                unset($subTables[$nTable]);
+                $nTable--;
+                if ($nTable) {
+                    $subTables[$nTable][] = $demangled;
+                    $tableStack[$nTable] .= $marker;
+                } else {
+                    $tableStack[$nTable] .= $demangled;
+                }
+            } else {
+                $tableStack[$nTable] .= $currentText;
+            }
+        }
+        */
 
     /**
      * doIfExistX
