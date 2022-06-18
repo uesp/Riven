@@ -94,16 +94,18 @@ class Riven
             : 0;
     }
 
-    // need to handle nested tables better
     // unset links that are removed (remove from wantedlinks)?
     // fix issues with <small> tags ... if cell is empty except for paired tags, consider it empty
     public static function doCleanTable($text, $args = array(), Parser $parser, PPFrame $frame)
     {
+        $debug = ParserHelper::arrayGet($args, 'debug');
+        $isPreview = $parser->getOptions()->getIsPreview();
+
         $initialLinks = self::getInternalsCount($parser);
         $input = $parser->recursiveTagParse($text, $frame);
 
-        // This ensures that tables are not toClean if being displayed directly on the Template page.
-        // Note that previewing will process cleantable normally.
+        // This ensures that tables are not cleaned if being displayed directly on the Template page.
+        // Previewing will process cleantable normally.
         if (
             $parser->getTitle()->getNamespace() == NS_TEMPLATE &&
             $frame->depth == 0 &&
@@ -124,48 +126,53 @@ class Riven
         do {
             $lastVal = self::parseTable($parser, $input, $offset);
             $output .= $lastVal;
-            show($offset, '/', strlen($input));
-        } while ($offset < strlen($input));
+        } while ($lastVal);
 
-        $output .= substr($input, $offset);
-        show("Input:\n", $input, "\n\nOutput:\n", $output);
+        $after = substr($input, $offset);
+        $output .= $after;
 
-        return [$output, 'markerType' => 'nowiki'];
+        if ($debug && $isPreview) {
+            $output = $parser->recursiveTagParseFully($output);
+            return '<pre>' . htmlspecialchars($output) . '</pre>';
+        }
+
+        return $output;
     }
 
+    // I'm convinced there's a better way to structure this recursion but every time I try, I mess it up, so I'm
+    // leaving it this way despite how inelegant it is.
     private static function parseTable(Parser $parser, $input, &$offset, $open = null)
     {
         $output = '';
         $close = ['', -1];
+        $before = null;
         while (preg_match('#<(/?table)[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
             $match = $matches[0];
-            $tag = $matches[1][0];
-            if (is_null($open)) {
-                $open = $match;
+            if (is_null($before) && is_null($open)) {
+                $before = ($match[1] > $offset) ? substr($input, $offset, $match[1] - $offset) : '';
+                $offset = $match[1];
             }
 
-            // show("Match $tag found at: ", (string)$match[1]);
+            $tag = $matches[1][0];
+
             if ($tag == 'table') {
                 $output .= substr($input, $offset, $match[1] - $offset);
                 $offset = $match[1] + strlen($match[0]);
                 $output .= self::parseTable($parser, $input, $offset, $match);
-                // show("Parsed Table:\n", $cleaned);
             } else {
                 $close = $match;
-                // $output .= substr($input, $offset, $match[1] - $offset);
-                $output .= '<b>Table wuz here</b>';
-                $offset = $match[1] + strlen($match[0]);
+                $output .= substr($input, $offset, $match[1] - $offset);
+                $offset = $match[1] + strlen($match[0]); // Set for caller's benefit.
                 break;
             }
         }
 
-        $output = $open[0] . $output . $close[0];
-        if (strlen($output)) {
+        if (!is_null($open) && strlen($output) > 0) {
+            $output = $open[0] . $output . $close[0];
             $output = $parser->insertStripItem($output);
         }
 
-        show('Output: ', $output);
-        return $output;
+        return $before . $output;
     }
 
     /*
