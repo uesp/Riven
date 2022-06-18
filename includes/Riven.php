@@ -130,43 +130,6 @@ class Riven
         return $output;
     }
 
-    /*
-            // Delimiter starting new table
-                $nTable++;
-                $tableStack[$nTable] = $currentText;
-                $subTables[$nTable] = array();
-
-            // Delimiter ending current table
-            elseif (strtolower(substr($currentText, 0, 7)) == '</table') {
-                $tableStack[$nTable] .= $currentText;
-                $toClean = efMetaTemplateDoCleantable($tableStack[$nTable], $dolinks, $parser);
-
-                // I could check here for empty tables (<table[^>]*>\s+</table>) and delete them... but is that what should be done?
-                $demangled = '';
-                $mlast = 0;
-                for ($isub = 0; $isub < count($subTables[$nTable]); $isub++) {
-                    $mloc = strpos($toClean, $marker, $mlast);
-                    $demangled .= substr($toClean, $mlast, $mloc - $mlast);
-                    $demangled .= $subTables[$nTable][$isub];
-                    $mlast = $mloc + $markerLen;
-                }
-                $demangled .= substr($toClean, $mlast);
-
-                unset($tablestack[$nTable]);
-                unset($subTables[$nTable]);
-                $nTable--;
-                if ($nTable) {
-                    $subTables[$nTable][] = $demangled;
-                    $tableStack[$nTable] .= $marker;
-                } else {
-                    $tableStack[$nTable] .= $demangled;
-                }
-            } else {
-                $tableStack[$nTable] .= $currentText;
-            }
-        }
-        */
-
     /**
      * doIfExistX
      *
@@ -479,6 +442,107 @@ class Riven
         ParserHelper::cacheMagicWords(self::$allMagicWords);
     }
 
+    private static function cleanRows($tableBody)
+    {
+        return $tableBody;
+    }
+
+    /*
+    // the function that actually does the work of cleantable, called each time a table is closed
+    function efMetaTemplateDoCleantable($input, $dolinks, $parser)
+    {
+        $output = '';
+        $deletedlinks = array();
+        $rawrows = preg_split('/(\s*<tr(?:\s.*?>|>\s*))/is', $input, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $output .= $rawrows[0];
+        $posttext = '';
+        $rows = array();
+
+        $colspan = NULL;
+        for ($k = 0, $j = 1; $j < count($rawrows); $j++) {
+            if (preg_match('/colspan\s*=\s*\"?(\d+)/', $rawrows[$j], $matches)) {
+                if (is_null($colspan) || $matches[1] > $colspan)
+                    $colspan = $matches[1];
+            }
+            if ($j % 2) {
+                $rows[$k] = $rawrows[$j];
+            } else {
+                $rows[$k] .= $rawrows[$j];
+                $k++;
+            }
+        }
+
+        $k = count($rows) - 1;
+        if (preg_match('/^(.*?<\s*\/\s*tr(?:\s*[^>]*>|>))(.*)$/is', $rows[$k], $matches)) {
+            $rows[$k] = $matches[1];
+            $posttext = $matches[2];
+        }
+
+        $empty = array();
+        $header = array();
+        for ($k = 0; $k < count($rows); $k++) {
+            $header[$k] = false;
+            if (!is_null($colspan) && preg_match('/colspan\s*=\s*\"?' . $colspan . '[\"\s>]/is', $rows[$k]) && preg_match('/<th/', $rows[$k])) {
+                $header[$k] = true;
+            }
+            preg_match_all('/<\s*td(?:\s*[^>]*>|>)(.*?)<\s*\/\s*td(?:\s*[^>]*>|>)/is', $rows[$k], $cells, PREG_PATTERN_ORDER);
+            if (count($cells[1]))
+                $empty[$k] = true;
+            else
+                $empty[$k] = false;
+            for ($l = 0; $l < count($cells[1]); $l++) {
+                // html tags (<..>) and unset template params ({{{..}}}) can be present in an "empty" cell
+                // anything else is considered non-empty
+                // BUT have to keep <!--LINK 0:0-->
+                //     gets converted into proper link later
+                if (!preg_match('/^\s*(?:(?:<[^!][^>]+>\s*)|(?:{{{[^}]*}}}\s*))*\s*$/is', $cells[1][$l]))
+                    $empty[$k] = false;
+            }
+        }
+
+        $emptyset = false;
+        $clearhead = NULL;
+        for ($k = 0; $k < count($rows); $k++) {
+            if (!$emptyset) {
+                if ($empty[$k]) {
+                    $emptyset = true;
+                    if ($k > 2 && $header[$k - 1])
+                        $clearhead = $k - 1;
+                    else
+                        $clearhead = NULL;
+                }
+            } else {
+                if (!$empty[$k]) {
+                    if ($header[$k] && !is_null($clearhead)) {
+                        $empty[$clearhead] = true;
+                    }
+                    $emptyset = false;
+                }
+            }
+        }
+        if ($emptyset && !is_null($clearhead))
+            $empty[$clearhead] = true;
+
+        for ($k = 0; $k < count($rows); $k++) {
+            if (!$empty[$k])
+                $output .= $rows[$k];
+            else if ($dolinks) {
+                // links are all represented by placeholders at this point
+                // and each placeholder is unique .... even if they all point to the same final link
+                if (preg_match_all('/<!--\s*LINK\s+(\d+):(\d+)\s*-->/', $rows[$k], $matches, PREG_SET_ORDER)) {
+                    foreach ($matches as $mset) {
+                        unset($parser->mLinkHolders->internals[$mset[1]][$mset[2]]);
+                        if (!count($parser->mLinkHolders->internals[$mset[1]]))
+                            unset($parser->mLinkHolders->internals[$mset[1]]);
+                    }
+                }
+            }
+        }
+        $output .= $posttext;
+        return $output;
+    }
+*/
+
     private static function cleanSpaceNode(PPNode $node, $recurse)
     {
         $prevNode = null;
@@ -583,24 +647,23 @@ class Riven
         $output = '';
         $close = ['', -1];
         $before = null;
-        while (preg_match('#<(/?table)[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
+        while (preg_match('#</?table[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
             $match = $matches[0];
             if (is_null($before) && is_null($open)) {
                 $before = ($match[1] > $offset) ? substr($input, $offset, $match[1] - $offset) : '';
                 $offset = $match[1];
             }
 
-            $tag = $matches[1][0];
-
-            if ($tag == 'table') {
+            if ($match[0][1] == '/') {
+                $close = $match;
+                $tableBody = substr($input, $offset, $match[1] - $offset);
+                $output .= self::cleanRows($tableBody);
+                $offset = $match[1] + strlen($match[0]); // Set for caller's benefit.
+                break;
+            } else {
                 $output .= substr($input, $offset, $match[1] - $offset);
                 $offset = $match[1] + strlen($match[0]);
                 $output .= self::parseTable($parser, $input, $offset, $match);
-            } else {
-                $close = $match;
-                $output .= substr($input, $offset, $match[1] - $offset);
-                $offset = $match[1] + strlen($match[0]); // Set for caller's benefit.
-                break;
             }
         }
 
