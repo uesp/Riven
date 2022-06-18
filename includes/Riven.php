@@ -85,15 +85,6 @@ class Riven
         return $text;
     }
 
-    private static function getInternalsCount(Parser $parser)
-    {
-        // Because this is delving into two levels of public-but-really-private properties and there are no equivalent
-        // method calls to do this, we put it into its own function so it can readily be replaced if needed.
-        return isset($parser->mLinkHolders->internals)
-            ? count($parser->mLinkHolders->internals)
-            : 0;
-    }
-
     // unset links that are removed (remove from wantedlinks)?
     // fix issues with <small> tags ... if cell is empty except for paired tags, consider it empty
     public static function doCleanTable($text, $args = array(), Parser $parser, PPFrame $frame)
@@ -137,42 +128,6 @@ class Riven
         }
 
         return $output;
-    }
-
-    // I'm convinced there's a better way to structure this recursion but every time I try, I mess it up, so I'm
-    // leaving it this way despite how inelegant it is.
-    private static function parseTable(Parser $parser, $input, &$offset, $open = null)
-    {
-        $output = '';
-        $close = ['', -1];
-        $before = null;
-        while (preg_match('#<(/?table)[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
-            $match = $matches[0];
-            if (is_null($before) && is_null($open)) {
-                $before = ($match[1] > $offset) ? substr($input, $offset, $match[1] - $offset) : '';
-                $offset = $match[1];
-            }
-
-            $tag = $matches[1][0];
-
-            if ($tag == 'table') {
-                $output .= substr($input, $offset, $match[1] - $offset);
-                $offset = $match[1] + strlen($match[0]);
-                $output .= self::parseTable($parser, $input, $offset, $match);
-            } else {
-                $close = $match;
-                $output .= substr($input, $offset, $match[1] - $offset);
-                $offset = $match[1] + strlen($match[0]); // Set for caller's benefit.
-                break;
-            }
-        }
-
-        if (!is_null($open) && strlen($output) > 0) {
-            $output = $open[0] . $output . $close[0];
-            $output = $parser->insertStripItem($output);
-        }
-
-        return $before . $output;
     }
 
     /*
@@ -607,6 +562,56 @@ class Riven
         return $newTemplate;
     }
 
+    private static function getInternalsCount(Parser $parser)
+    {
+        // Because this is delving into two levels of public-but-really-private properties and there are no equivalent
+        // method calls to do this, we put it into its own function so it can readily be replaced if needed.
+        return isset($parser->mLinkHolders->internals)
+            ? count($parser->mLinkHolders->internals)
+            : 0;
+    }
+
+    private static function isLink(PPNode $node = null)
+    {
+        return $node instanceof PPNode_Hash_Text && $node->value == '[[';
+    }
+
+    // I'm convinced there's a better way to structure this recursion but every time I try, I mess it up, so I'm
+    // leaving it this way despite how inelegant it is.
+    private static function parseTable(Parser $parser, $input, &$offset, $open = null)
+    {
+        $output = '';
+        $close = ['', -1];
+        $before = null;
+        while (preg_match('#<(/?table)[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
+            $match = $matches[0];
+            if (is_null($before) && is_null($open)) {
+                $before = ($match[1] > $offset) ? substr($input, $offset, $match[1] - $offset) : '';
+                $offset = $match[1];
+            }
+
+            $tag = $matches[1][0];
+
+            if ($tag == 'table') {
+                $output .= substr($input, $offset, $match[1] - $offset);
+                $offset = $match[1] + strlen($match[0]);
+                $output .= self::parseTable($parser, $input, $offset, $match);
+            } else {
+                $close = $match;
+                $output .= substr($input, $offset, $match[1] - $offset);
+                $offset = $match[1] + strlen($match[0]); // Set for caller's benefit.
+                break;
+            }
+        }
+
+        if (!is_null($open) && strlen($output) > 0) {
+            $output = $open[0] . $output . $close[0];
+            $output = $parser->insertStripItem($output);
+        }
+
+        return $before . $output;
+    }
+
     /**
      * splitNamedArgs
      *
@@ -683,10 +688,5 @@ class Riven
                 $child = $child->getNextSibling();
             }
         }
-    }
-
-    private static function isLink(PPNode $node = null)
-    {
-        return $node instanceof PPNode_Hash_Text && $node->value == '[[';
     }
 }
