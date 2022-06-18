@@ -645,7 +645,6 @@ class Riven
     private static function parseTable(Parser $parser, $input, &$offset, $open = null)
     {
         $output = '';
-        $close = ['', -1];
         $before = null;
         while (preg_match('#</?table[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
             $match = $matches[0];
@@ -654,21 +653,18 @@ class Riven
                 $offset = $match[1];
             }
 
+            $output .= substr($input, $offset, $match[1] - $offset);
+            $offset = $match[1] + strlen($match[0]);
             if ($match[0][1] == '/') {
-                $close = $match;
-                $tableBody = substr($input, $offset, $match[1] - $offset);
-                $output .= self::cleanRows($tableBody);
-                $offset = $match[1] + strlen($match[0]); // Set for caller's benefit.
+                $output = self::cleanRows($output);
                 break;
             } else {
-                $output .= substr($input, $offset, $match[1] - $offset);
-                $offset = $match[1] + strlen($match[0]);
-                $output .= self::parseTable($parser, $input, $offset, $match);
+                $output .= self::parseTable($parser, $input, $offset, $match[0]);
             }
         }
 
         if (!is_null($open) && strlen($output) > 0) {
-            $output = $open[0] . $output . $close[0];
+            $output = $open . $output . '</table>';
             $output = $parser->insertStripItem($output);
         }
 
