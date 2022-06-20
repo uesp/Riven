@@ -19,7 +19,8 @@
 	},
 	"AutoloadClasses": {
 		"Riven": "includes/Riven.php",
-		"RivenHooks": "includes/RivenHooks.php"
+		"RivenHooks": "includes/RivenHooks.php",
+		"TableCell": "includes/TableCell.php"
 	},
 	"Hooks": {
 		"MagicWordwgVariableIDs": "RivenHooks::onMagicWordwgVariableIDs",

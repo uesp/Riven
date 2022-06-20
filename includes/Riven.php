@@ -92,7 +92,6 @@ class Riven
         $debug = ParserHelper::arrayGet($args, 'debug');
         $isPreview = $parser->getOptions()->getIsPreview();
 
-        $initialLinks = self::getInternalsCount($parser);
         $input = $parser->recursiveTagParse($text, $frame);
 
         // This ensures that tables are not cleaned if being displayed directly on the Template page.
@@ -104,12 +103,6 @@ class Riven
         ) {
             return $input;
         }
-
-        // Don't bother to waste CPU doing preg_matches on 'a href' if:
-        // * there aren't any links to start with
-        // * if the parser structure has changed and mLinks is no longer where data is stored, or
-        // * if no links were added by tag contents.
-        $dolinks = self::getInternalsCount($parser) > $initialLinks;
 
         $offset = 0;
         $output = '';
@@ -442,106 +435,52 @@ class Riven
         ParserHelper::cacheMagicWords(self::$allMagicWords);
     }
 
-    private static function cleanRows($tableBody)
+    private static function cleanRows($input)
     {
-        return $tableBody;
-    }
+        // show($input);
+        $map = self::buildMap($input);
+        // show($map);
+        $sectionContent = false;
+        for ($rowNum = count($map) - 1; $rowNum >= 0; $rowNum--) {
+            $row = $map[$rowNum];
+            $rowContent = false;
+            $allHeaders = true;
+            $spans = [];
 
-    /*
-    // the function that actually does the work of cleantable, called each time a table is closed
-    function efMetaTemplateDoCleantable($input, $dolinks, $parser)
-    {
-        $output = '';
-        $deletedlinks = array();
-        $rawrows = preg_split('/(\s*<tr(?:\s.*?>|>\s*))/is', $input, -1, PREG_SPLIT_DELIM_CAPTURE);
-        $output .= $rawrows[0];
-        $posttext = '';
-        $rows = array();
-
-        $colspan = NULL;
-        for ($k = 0, $j = 1; $j < count($rawrows); $j++) {
-            if (preg_match('/colspan\s*=\s*\"?(\d+)/', $rawrows[$j], $matches)) {
-                if (is_null($colspan) || $matches[1] > $colspan)
-                    $colspan = $matches[1];
-            }
-            if ($j % 2) {
-                $rows[$k] = $rawrows[$j];
-            } else {
-                $rows[$k] .= $rawrows[$j];
-                $k++;
-            }
-        }
-
-        $k = count($rows) - 1;
-        if (preg_match('/^(.*?<\s*\/\s*tr(?:\s*[^>]*>|>))(.*)$/is', $rows[$k], $matches)) {
-            $rows[$k] = $matches[1];
-            $posttext = $matches[2];
-        }
-
-        $empty = array();
-        $header = array();
-        for ($k = 0; $k < count($rows); $k++) {
-            $header[$k] = false;
-            if (!is_null($colspan) && preg_match('/colspan\s*=\s*\"?' . $colspan . '[\"\s>]/is', $rows[$k]) && preg_match('/<th/', $rows[$k])) {
-                $header[$k] = true;
-            }
-            preg_match_all('/<\s*td(?:\s*[^>]*>|>)(.*?)<\s*\/\s*td(?:\s*[^>]*>|>)/is', $rows[$k], $cells, PREG_PATTERN_ORDER);
-            if (count($cells[1]))
-                $empty[$k] = true;
-            else
-                $empty[$k] = false;
-            for ($l = 0; $l < count($cells[1]); $l++) {
-                // html tags (<..>) and unset template params ({{{..}}}) can be present in an "empty" cell
-                // anything else is considered non-empty
-                // BUT have to keep <!--LINK 0:0-->
-                //     gets converted into proper link later
-                if (!preg_match('/^\s*(?:(?:<[^!][^>]+>\s*)|(?:{{{[^}]*}}}\s*))*\s*$/is', $cells[1][$l]))
-                    $empty[$k] = false;
-            }
-        }
-
-        $emptyset = false;
-        $clearhead = NULL;
-        for ($k = 0; $k < count($rows); $k++) {
-            if (!$emptyset) {
-                if ($empty[$k]) {
-                    $emptyset = true;
-                    if ($k > 2 && $header[$k - 1])
-                        $clearhead = $k - 1;
-                    else
-                        $clearhead = NULL;
-                }
-            } else {
-                if (!$empty[$k]) {
-                    if ($header[$k] && !is_null($clearhead)) {
-                        $empty[$clearhead] = true;
-                    }
-                    $emptyset = false;
-                }
-            }
-        }
-        if ($emptyset && !is_null($clearhead))
-            $empty[$clearhead] = true;
-
-        for ($k = 0; $k < count($rows); $k++) {
-            if (!$empty[$k])
-                $output .= $rows[$k];
-            else if ($dolinks) {
-                // links are all represented by placeholders at this point
-                // and each placeholder is unique .... even if they all point to the same final link
-                if (preg_match_all('/<!--\s*LINK\s+(\d+):(\d+)\s*-->/', $rows[$k], $matches, PREG_SET_ORDER)) {
-                    foreach ($matches as $mset) {
-                        unset($parser->mLinkHolders->internals[$mset[1]][$mset[2]]);
-                        if (!count($parser->mLinkHolders->internals[$mset[1]]))
-                            unset($parser->mLinkHolders->internals[$mset[1]]);
+            foreach ($row as $cell) {
+                if ($cell instanceof TableCell) {
+                    $rowContent |= !$cell->isHeader() && strlen(trim($cell->getContent())) > 0;
+                    $allHeaders &= $cell->isHeader();
+                    if ($cell->getParent()) {
+                        $spans[] = $cell->getParent();
                     }
                 }
             }
+
+            // show('Row: ', $rowNum);
+            // show('Row Content: ', $rowContent, "\n", $row);
+            $sectionContent |= $rowContent;
+            if ($allHeaders) {
+                // show('All Headers: ', $sectionContent ? 'Yes' : 'No');
+                if ($sectionContent) {
+                    $sectionContent = false;
+                } else {
+                    unset($map[$rowNum]);
+                }
+            } elseif (!$rowContent) {
+                /** @var TableCell $cell */
+                foreach ($spans as $cell) {
+                    $cell->decrementRowspan();
+                    // show('RowCount: ', $cell->getRowspan());
+                }
+
+                unset($map[$rowNum]);
+            }
         }
-        $output .= $posttext;
-        return $output;
+
+        // show($map);
+        return self::mapToTable($map);
     }
-*/
 
     private static function cleanSpaceNode(PPNode $node, $recurse)
     {
@@ -578,6 +517,49 @@ class Riven
         self::cleanSpaceNode($rootNode->getFirstChild(), $recurse);
 
         return $frame->expand($rootNode, PPFrame::RECOVER_ORIG);
+    }
+
+    /**
+     * buildMap
+     *
+     * @param mixed $input
+     *
+     * @return array
+     */
+    private static function buildMap($input)
+    {
+        $map = [];
+        $rowNum = 0;
+        preg_match_all('#(<tr[^>]*>)(.*?)</tr\s*>#is', $input, $rawRows, PREG_SET_ORDER);
+        foreach ($rawRows as $rawRow) {
+            $map[$rowNum]['open'] = $rawRow[1];
+            $cellNum = 0;
+            preg_match_all('#<(?<name>t[dh])\s*(?<attribs>[^>]*)>(?<content>.*?)</\1\s*>#s', $rawRow[0], $rawCells, PREG_SET_ORDER);
+            foreach ($rawCells as $rawCell) {
+                $cell = new TableCell($rawCell);
+                while (isset($map[$rowNum][$cellNum])) {
+                    $cellNum++;
+                }
+
+                $map[$rowNum][$cellNum] = $cell;
+                $rowspan = $cell->getRowspan();
+                $colspan = $cell->getColspan();
+                if ($rowspan > 1 || $colspan > 1) {
+                    $spanCell = new TableCell($cell);
+                    for ($r = 0; $r < $rowspan; $r++) {
+                        for ($c = 0; $c < $colspan; $c++) {
+                            if ($r != 0 || $c != 0) {
+                                $map[$rowNum + $r][$cellNum + $c] = $spanCell;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $rowNum++;
+        }
+
+        return $map;
     }
 
     /**
@@ -626,22 +608,32 @@ class Riven
         return $newTemplate;
     }
 
-    private static function getInternalsCount(Parser $parser)
-    {
-        // Because this is delving into two levels of public-but-really-private properties and there are no equivalent
-        // method calls to do this, we put it into its own function so it can readily be replaced if needed.
-        return isset($parser->mLinkHolders->internals)
-            ? count($parser->mLinkHolders->internals)
-            : 0;
-    }
-
     private static function isLink(PPNode $node = null)
     {
         return $node instanceof PPNode_Hash_Text && $node->value == '[[';
     }
 
-    // I'm convinced there's a better way to structure this recursion but every time I try, I mess it up, so I'm
-    // leaving it this way despite how inelegant it is.
+    private static function mapToTable($map)
+    {
+        $output = '';
+        foreach ($map as $row) {
+            $output .= $row['open'] . "\n";
+            foreach ($row as $name => $cell) {
+                if ($name !== 'open') {
+                    // Conditional is to avoid unwanted blank lines in output.
+                    $html = $cell->toHtml();
+                    if ($html) {
+                        $output .= $html . "\n";
+                    }
+                }
+            }
+
+            $output .= "</tr>\n";
+        }
+
+        return $output;
+    }
+
     private static function parseTable(Parser $parser, $input, &$offset, $open = null)
     {
         $output = '';
@@ -649,7 +641,9 @@ class Riven
         while (preg_match('#</?table[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
             $match = $matches[0];
             if (is_null($before) && is_null($open)) {
-                $before = ($match[1] > $offset) ? substr($input, $offset, $match[1] - $offset) : '';
+                $before = ($match[1] > $offset)
+                    ? substr($input, $offset, $match[1] - $offset)
+                    : '';
                 $offset = $match[1];
             }
 
@@ -657,6 +651,7 @@ class Riven
             $offset = $match[1] + strlen($match[0]);
             if ($match[0][1] == '/') {
                 $output = self::cleanRows($output);
+                // show($output);
                 break;
             } else {
                 $output .= self::parseTable($parser, $input, $offset, $match[0]);
