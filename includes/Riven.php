@@ -89,33 +89,34 @@ class Riven
     // fix issues with <small> tags ... if cell is empty except for paired tags, consider it empty
     public static function doCleanTable($text, $args = array(), Parser $parser, PPFrame $frame)
     {
-        $debug = ParserHelper::arrayGet($args, 'debug');
-        $isPreview = $parser->getOptions()->getIsPreview();
-
         $input = $parser->recursiveTagParse($text, $frame);
+        $isPreview = $parser->getOptions()->getIsPreview();
 
         // This ensures that tables are not cleaned if being displayed directly on the Template page.
         // Previewing will process cleantable normally.
         if (
             $parser->getTitle()->getNamespace() == NS_TEMPLATE &&
             $frame->depth == 0 &&
-            !$parser->getOptions()->getIsPreview()
+            $isPreview
         ) {
             return $input;
         }
 
+        $input = trim($input);
         $offset = 0;
         $output = '';
         $lastVal = null;
+        $protectRows = intval(ParserHelper::arrayGet($args, 'protectrows', 1));
         do {
-            $lastVal = self::parseTable($parser, $input, $offset);
+            $lastVal = self::parseTable($parser, $input, $offset, $protectRows);
             $output .= $lastVal;
         } while ($lastVal);
 
         $after = substr($input, $offset);
         $output .= $after;
 
-        if ($debug && $isPreview) {
+        $debug = ParserHelper::arrayGet($args, 'debug');
+        if ($debug && $isPreview && strlen($output) > 0) {
             $output = $parser->recursiveTagParseFully($output);
             return '<pre>' . htmlspecialchars($output) . '</pre>';
         }
@@ -435,21 +436,22 @@ class Riven
         ParserHelper::cacheMagicWords(self::$allMagicWords);
     }
 
-    private static function cleanRows($input)
+    private static function cleanRows($input, $protectRows = 1)
     {
-        // show($input);
+        // show("Clean Rows In:\n", $input);
         $map = self::buildMap($input);
         // show($map);
-        $sectionContent = false;
-        for ($rowNum = count($map) - 1; $rowNum >= 0; $rowNum--) {
+        $sectionHasContent = false;
+        for ($rowNum = count($map) - 1; $rowNum >= $protectRows; $rowNum--) {
             $row = $map[$rowNum];
-            $rowContent = false;
+            $rowHasContent = false;
             $allHeaders = true;
             $spans = [];
 
             foreach ($row as $cell) {
                 if ($cell instanceof TableCell) {
-                    $rowContent |= !$cell->isHeader() && strlen(trim($cell->getContent())) > 0;
+                    $content = trim(preg_replace('#\{\{\{[^\}]*\}\}\}#', '', html_entity_decode($cell->getContent())));
+                    $rowHasContent |= !$cell->isHeader() && strlen($content) > 0;
                     $allHeaders &= $cell->isHeader();
                     if ($cell->getParent()) {
                         $spans[] = $cell->getParent();
@@ -457,17 +459,15 @@ class Riven
                 }
             }
 
-            // show('Row: ', $rowNum);
-            // show('Row Content: ', $rowContent, "\n", $row);
-            $sectionContent |= $rowContent;
+            // show('Row: ', $rowNum, "\n", $rowHasContent, "\n", $row);
+            $sectionHasContent |= $rowHasContent;
             if ($allHeaders) {
-                // show('All Headers: ', $sectionContent ? 'Yes' : 'No');
-                if ($sectionContent) {
-                    $sectionContent = false;
+                if ($sectionHasContent) {
+                    $sectionHasContent = false;
                 } else {
                     unset($map[$rowNum]);
                 }
-            } elseif (!$rowContent) {
+            } elseif (!$rowHasContent) {
                 /** @var TableCell $cell */
                 foreach ($spans as $cell) {
                     $cell->decrementRowspan();
@@ -634,8 +634,9 @@ class Riven
         return $output;
     }
 
-    private static function parseTable(Parser $parser, $input, &$offset, $open = null)
+    private static function parseTable(Parser $parser, $input, &$offset, $protectRows, $open = null)
     {
+        // show("Parse Table In:\n", substr($input, $offset));
         $output = '';
         $before = null;
         while (preg_match('#</?table[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
@@ -650,11 +651,12 @@ class Riven
             $output .= substr($input, $offset, $match[1] - $offset);
             $offset = $match[1] + strlen($match[0]);
             if ($match[0][1] == '/') {
-                $output = self::cleanRows($output);
-                // show($output);
+                $output = self::cleanRows($output, $protectRows);
+                // show("Clean Rows Out:\n", $output);
                 break;
             } else {
-                $output .= self::parseTable($parser, $input, $offset, $match[0]);
+                $output .= self::parseTable($parser, $input, $offset, $protectRows, $match[0]);
+                // show("Parse Table Out:\n", $output);
             }
         }
 
@@ -663,6 +665,8 @@ class Riven
             $output = $parser->insertStripItem($output);
         }
 
+        // show('Before: ', $before);
+        // show('Output: ', $output);
         return $before . $output;
     }
 
