@@ -53,9 +53,9 @@ class Riven
     {
         $text = trim($text);
         $mode = ParserHelper::getMagicValue(self::NA_MODE, $args);
-        show($mode);
+        // show($mode);
         $modeWord = ParserHelper::findMagicID($mode);
-        show($modeWord);
+        // show($modeWord);
         switch ($modeWord) {
             case self::AV_RECURSIVE:
                 $text = self::cleanSpacePP($text, $parser, $frame, true);
@@ -67,13 +67,11 @@ class Riven
                 $text = self::cleanSpaceOriginal($text);
         }
 
-        $debug = ParserHelper::getMagicValue(ParserHelper::NA_DEBUG, $args);
-        $isPreview = $parser->getOptions()->getIsPreview();
-        if ($debug && $isPreview) {
+        if (ParserHelper::checkDebug($parser, $args)) {
             return ['<pre>' . htmlspecialchars($text) . '</pre>', 'markerType' => 'nowiki'];
         }
 
-        if (!$isPreview && $parser->getTitle()->getNamespace() == NS_TEMPLATE) {
+        if (!$parser->getOptions()->getIsPreview() && $parser->getTitle()->getNamespace() == NS_TEMPLATE) {
             // categories and trails are stripped on ''any'' template page, not just when directly calling the template
             // (but only in non-preview mode)
             // save categories before processing
@@ -118,8 +116,7 @@ class Riven
         $after = substr($input, $offset);
         $output .= $after;
 
-        $debug = ParserHelper::getMagicValue(ParserHelper::NA_DEBUG, $args);
-        if ($debug && $isPreview && strlen($output) > 0) {
+        if (strlen($output > 0) && ParserHelper::checkDebug($parser, $args)) {
             $output = $parser->recursiveTagParseFully($output);
             return '<pre>' . htmlspecialchars($output) . '</pre>';
         }
@@ -205,20 +202,26 @@ class Riven
         list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
+            ParserHelper::NA_DEBUG,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT
         );
+
         if (count($values) > 0 && ParserHelper::checkIfs($magicArgs)) {
-            $nodes = [];
+            $nodes = '';
+            // show('Values: ', $values);
             foreach ($values as $pageName) {
                 $pageName = $frame->expand($pageName);
+                // show($pageName);
                 $t = Title::newFromText($pageName, NS_TEMPLATE);
                 if ($t && $t->exists()) {
-                    $nodes[] = self::createTemplateNode($pageName);
+                    // show('Exists!');
+                    $nodes .= '{{' . $pageName . '}}';
                 }
             }
+            // show('Nodes: ', $nodes);
 
-            return $frame->expand($nodes);
+            return [$nodes, 'noparse' => ParserHelper::checkDebug($parser, $magicArgs)];
         }
     }
 
@@ -344,9 +347,15 @@ class Riven
             $frame,
             $args,
             ParserHelper::NA_DEBUG,
+            ParserHelper::NA_IF,
+            ParserHelper::NA_IFNOT,
             self::NA_EXPLODE,
             self::NA_SEPARATOR
         );
+
+        if (!ParserHelper::checkIfs($magicArgs)) {
+            return '';
+        }
 
         if (isset($values[1])) {
             // Figure out what we're dealing with and populate appropriately.
@@ -355,12 +364,12 @@ class Riven
                 // Old #explodeargs; can be deleted once all are converted.
                 $values = ParserHelper::expandArray($frame, $values);
                 $nargs = $frame->expand($values[3]);
-                $templateName = $values[2];
+                $templateName = $frame->expand($values[2]);
                 $separator = $checkFormat;
                 $values = explode($separator, $frame->expand($values[0]));
                 $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
             } else {
-                $templateName = $values[0];
+                $templateName = $frame->expand($values[0]);
                 $nargs = $checkFormat;
                 $values = array_slice($values, 2);
                 if (isset($magicArgs[self::NA_EXPLODE])) {
@@ -388,29 +397,23 @@ class Riven
 
         list($named, $values) = self::splitNamedArgs($frame, $values);
         if (count($values) > 0) {
-            $templates = [];
+            $templates = '';
             for ($index = 0; $index < count($values); $index += $nargs) {
-                $newTemplate = self::createTemplateNode($frame->expand($templateName));
+                $templates .= '{{' . $templateName;
                 for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
                     $var = ParserHelper::arrayGet($values, $index + $paramNum, '');
-                    $param = self::createPartNode($paramNum + 1, $var, true);
-                    $newTemplate->addChild($param);
+                    $templates .= "|$var";
                 }
 
                 foreach ($named as $name => $value) {
-                    $partNode = self::createPartNode($name, $value, false);
-                    $newTemplate->addChild($partNode);
+                    $templates .= "|$name=$value";
                 }
 
-                $templates[] = $newTemplate;
+                $templates .= '}}';
             }
 
 
-            $debug = ParserHelper::getMagicValue(ParserHelper::NA_DEBUG, $args);
-            $debug = $parser->getOptions()->getIsPreview()
-                ? boolval($debug)
-                : ParserHelper::getMagicValue(ParserHelper::AV_ALWAYS, $args);
-            return $frame->expand($templates, $debug ? PPFrame::RECOVER_ORIG : 0);
+            return [$templates, 'noparse' => ParserHelper::checkDebug($parser, $magicArgs)];
         }
     }
 
