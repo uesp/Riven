@@ -8,28 +8,29 @@ namespace MediaWiki\Extension\MetaTemplate;
  */
 class Riven
 {
-    const NA_EXPLODE = 'parserhelper-explode';
-    const NA_NOWIKI = 'parserhelper-nowiki';
+    const AV_RECURSIVE = 'riven-recursive';
+    const AV_TOP = 'riven-top';
+
+    const NA_EXPLODE = 'riven-explode';
+    const NA_MODE = 'riven-mode';
+    const NA_PROTROWS = 'riven-protectrows';
     const NA_SEED = 'riven-seed';
     const NA_SEPARATOR = 'riven-separator';
 
     const PF_ARG = 'riven-arg'; // From DynamicFunctions
     const PF_IFEXISTX = 'riven-ifexistx';
-    const PF_INCLUDE = 'metatemplate-include';
+    const PF_INCLUDE = 'riven-include';
     const PF_PICKFROM = 'riven-pickfrom';
     const PF_RAND = 'riven-rand'; // From DynamicFunctions
-    const PF_SPLITARGS = 'metatemplate-splitargs';
+    const PF_SPLITARGS = 'riven-splitargs';
     const PF_TRIMLINKS = 'riven-trimlinks';
+
     const TG_CLEANSPACE = 'riven-cleanspace';
     const TG_CLEANTABLE = 'riven-cleantable';
-    const VR_SKINNAME = 'riven-skinname'; // From DynamicFunctions
 
-    private static $allMagicWords = [
-        self::NA_EXPLODE,
-        self::NA_NOWIKI,
-        self::NA_SEED,
-        self::NA_SEPARATOR,
-    ];
+    const TRACKING_EXPLODEARGS = 'riven-tracking-explodeargs';
+
+    const VR_SKINNAME = 'riven-skinname'; // From DynamicFunctions
 
     // From DynamicFunctions
     /**
@@ -48,24 +49,26 @@ class Riven
         return $request->getVal($values[0], isset($values[1]) ? $values[1] : '');
     }
 
-    public static function doCleanSpace($text, array $args = array(), Parser $parser, PPFrame $frame)
+    public static function doCleanSpace($text, array $args, Parser $parser, PPFrame $frame)
     {
-        $debug = ParserHelper::arrayGet($args, 'debug');
-        $mode = ParserHelper::arrayGet($args, 'mode');
-        $isPreview = $parser->getOptions()->getIsPreview();
         $text = trim($text);
-
-        switch ($mode) {
-            case 'recursive':
+        $mode = ParserHelper::getMagicValue(self::NA_MODE, $args);
+        show($mode);
+        $modeWord = ParserHelper::findMagicID($mode);
+        show($modeWord);
+        switch ($modeWord) {
+            case self::AV_RECURSIVE:
                 $text = self::cleanSpacePP($text, $parser, $frame, true);
                 break;
-            case 'top':
+            case self::AV_TOP:
                 $text = self::cleanSpacePP($text, $parser, $frame, false);
                 break;
             default:
                 $text = self::cleanSpaceOriginal($text);
         }
 
+        $debug = ParserHelper::getMagicValue(ParserHelper::NA_DEBUG, $args);
+        $isPreview = $parser->getOptions()->getIsPreview();
         if ($debug && $isPreview) {
             return ['<pre>' . htmlspecialchars($text) . '</pre>', 'markerType' => 'nowiki'];
         }
@@ -106,7 +109,7 @@ class Riven
         $offset = 0;
         $output = '';
         $lastVal = null;
-        $protectRows = intval(ParserHelper::arrayGet($args, 'protectrows', 1));
+        $protectRows = intval(ParserHelper::getMagicValue(self::NA_PROTROWS, $args, 1));
         do {
             $lastVal = self::parseTable($parser, $input, $offset, $protectRows);
             $output .= $lastVal;
@@ -115,7 +118,7 @@ class Riven
         $after = substr($input, $offset);
         $output .= $after;
 
-        $debug = ParserHelper::arrayGet($args, 'debug');
+        $debug = ParserHelper::getMagicValue(ParserHelper::NA_DEBUG, $args);
         if ($debug && $isPreview && strlen($output) > 0) {
             $output = $parser->recursiveTagParseFully($output);
             return '<pre>' . htmlspecialchars($output) . '</pre>';
@@ -340,7 +343,7 @@ class Riven
         list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
-            self::NA_NOWIKI,
+            ParserHelper::NA_DEBUG,
             self::NA_EXPLODE,
             self::NA_SEPARATOR
         );
@@ -355,7 +358,7 @@ class Riven
                 $templateName = $values[2];
                 $separator = $checkFormat;
                 $values = explode($separator, $frame->expand($values[0]));
-                $parser->addTrackingCategory('metatemplate-tracking-explodeargs');
+                $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
             } else {
                 $templateName = $values[0];
                 $nargs = $checkFormat;
@@ -402,9 +405,12 @@ class Riven
                 $templates[] = $newTemplate;
             }
 
-            $nowiki = ParserHelper::arrayGet($magicArgs, self::NA_NOWIKI, false);
-            $nowiki = $parser->getOptions()->getIsPreview() ? boolval($nowiki) : in_array($nowiki, ParserHelper::getMagicWordNames(ParserHelper::AV_ALWAYS));
-            return $frame->expand($templates, $nowiki ? PPFrame::RECOVER_ORIG : 0);
+
+            $debug = ParserHelper::getMagicValue(ParserHelper::NA_DEBUG, $args);
+            $debug = $parser->getOptions()->getIsPreview()
+                ? boolval($debug)
+                : ParserHelper::getMagicValue(ParserHelper::AV_ALWAYS, $args);
+            return $frame->expand($templates, $debug ? PPFrame::RECOVER_ORIG : 0);
         }
     }
 
@@ -433,7 +439,15 @@ class Riven
 
     public static function init()
     {
-        ParserHelper::cacheMagicWords(self::$allMagicWords);
+        ParserHelper::cacheMagicWords([
+            self::AV_RECURSIVE,
+            self::AV_TOP,
+            self::NA_EXPLODE,
+            self::NA_MODE,
+            self::NA_PROTROWS,
+            self::NA_SEED,
+            self::NA_SEPARATOR,
+        ]);
     }
 
     private static function cleanRows($input, $protectRows = 1)

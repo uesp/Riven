@@ -1,20 +1,13 @@
 <?php
-// namespace MediaWiki\Extension\MetaTemplate;
-use MediaWiki\MediaWikiServices;
-// use MediaWiki\DatabaseUpdater;
 
-// TODO: Add {{#define/local/preview:a=b|c=d}}
-/**
- * [Description MetaTemplateHooks]
- */
+use MediaWiki\MediaWikiServices;
+
 class RivenHooks
 {
 	private static $tagInfo = [
 		Riven::TG_CLEANSPACE => 'Riven::doCleanSpace',
 		Riven::TG_CLEANTABLE => 'Riven::doCleanTable'
 	];
-
-	private static $doOnce = true;
 
 	// This is the best place to disable individual magic words;
 	// To disable all magic words, disable the hook that calls this function
@@ -40,14 +33,10 @@ class RivenHooks
 	 */
 	public static function onParserFirstCallInit(Parser $parser)
 	{
-		if (true) {
-			self::$doOnce = false;
-
-			ParserHelper::init();
-			self::initParserFunctions($parser);
-			self::initTagFunctions($parser);
-			Riven::init();
-		}
+		ParserHelper::init();
+		self::initParserFunctions($parser);
+		self::initTagFunctions($parser);
+		Riven::init();
 	}
 	/**
 	 * onParserGetVariableValueSwitch
@@ -98,7 +87,7 @@ class RivenHooks
 	private static function initTagFunctions(Parser $parser)
 	{
 		foreach (self::$tagInfo as $k => $v) {
-			ParserHelper::setAllSynonyms($parser, $k, $v);
+			ParserHelper::setHookSynonyms($parser, $k, $v);
 		}
 	}
 }
