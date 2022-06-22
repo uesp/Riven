@@ -51,24 +51,26 @@ class Riven
 
     public static function doCleanSpace($text, array $args, Parser $parser, PPFrame $frame)
     {
-        $text = trim($text);
-        $mode = ParserHelper::getMagicValue(self::NA_MODE, $args);
+        $output = trim($text);
+        $output = preg_replace('#<!--.*?-->#', '', $output);
+        $mode = ParserHelper::getMagicValue(self::NA_MODE, $args, 'none');
         // show($mode);
         $modeWord = ParserHelper::findMagicID($mode);
+        show($modeWord);
         // show($modeWord);
         switch ($modeWord) {
             case self::AV_RECURSIVE:
-                $text = self::cleanSpacePP($text, $parser, $frame, true);
+                $output = self::cleanSpacePP($output, $parser, $frame, true);
                 break;
             case self::AV_TOP:
-                $text = self::cleanSpacePP($text, $parser, $frame, false);
+                $output = self::cleanSpacePP($output, $parser, $frame, false);
                 break;
             default:
-                $text = self::cleanSpaceOriginal($text);
+                $output = self::cleanSpaceOriginal($output);
         }
 
-        if (ParserHelper::checkDebug($parser, $args)) {
-            return ['<pre>' . htmlspecialchars($text) . '</pre>', 'markerType' => 'nowiki'];
+        if (ParserHelper::checkDebugMagic($parser, $args)) {
+            return ['<pre>' . htmlspecialchars($output) . '</pre>', 'markerType' => 'nowiki'];
         }
 
         if (!$parser->getOptions()->getIsPreview() && $parser->getTitle()->getNamespace() == NS_TEMPLATE) {
@@ -76,14 +78,13 @@ class Riven
             // (but only in non-preview mode)
             // save categories before processing
             $precats = $parser->getOutput()->getCategories();
-            $text = $parser->recursiveTagParse($text, $frame);
+            $output = $parser->recursiveTagParse($output, $frame);
             // reset categories to the pre-processing list to remove any new categories
             $parser->getOutput()->setCategoryLinks($precats);
-        } else {
-            $text = $parser->recursiveTagParse($text, $frame);
+            return $output;
         }
 
-        return $text;
+        return $parser->recursiveTagParse($output, $frame);
     }
 
     // unset links that are removed (remove from wantedlinks)?
@@ -116,9 +117,9 @@ class Riven
         $after = substr($input, $offset);
         $output .= $after;
 
-        if (strlen($output > 0) && ParserHelper::checkDebug($parser, $args)) {
+        if (strlen($output > 0) && ParserHelper::checkDebugMagic($parser, $args)) {
             $output = $parser->recursiveTagParseFully($output);
-            return '<pre>' . htmlspecialchars($output) . '</pre>';
+            return ['<pre>' . htmlspecialchars($output) . '</pre>', 'markerType' => 'nowiki'];
         }
 
         return $output;
@@ -523,7 +524,7 @@ class Riven
 
     private static function cleanSpaceOriginal($text)
     {
-        return preg_replace('/([\]\}\>])\s+([\<\{\[])/s', '$1$2', $text);
+        // return preg_replace('/([\]\}\>])\s+([\<\{\[])/s', '$1$2', $text);
     }
 
     private static function cleanSpacePP($text, Parser $parser, PPFrame $frame, $recurse)
