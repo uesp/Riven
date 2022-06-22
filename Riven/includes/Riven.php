@@ -56,7 +56,6 @@ class Riven
         $mode = ParserHelper::getMagicValue(self::NA_MODE, $args, 'none');
         // show($mode);
         $modeWord = ParserHelper::findMagicID($mode);
-        show($modeWord);
         // show($modeWord);
         switch ($modeWord) {
             case self::AV_RECURSIVE:
@@ -67,6 +66,7 @@ class Riven
                 break;
             default:
                 $output = self::cleanSpaceOriginal($output);
+                break;
         }
 
         if (ParserHelper::checkDebugMagic($parser, $args)) {
@@ -524,7 +524,7 @@ class Riven
 
     private static function cleanSpaceOriginal($text)
     {
-        // return preg_replace('/([\]\}\>])\s+([\<\{\[])/s', '$1$2', $text);
+        return preg_replace('/([\]\}\>])\s+([\<\{\[])/s', '$1$2', $text);
     }
 
     private static function cleanSpacePP($text, Parser $parser, PPFrame $frame, $recurse)
@@ -578,6 +578,52 @@ class Riven
         }
 
         return $map;
+    }
+
+    /**
+     * createPartNode
+     *
+     * @param string|int $name
+     * @param mixed $value
+     * @param bool $forceAnonymous
+     *
+     * @return PPNode_Hash_Tree
+     */
+    private static function createPartNode($name, $value, $forceAnonymous = false)
+    {
+        $nameNode = new PPNode_Hash_Tree('name');
+        $anonymous = boolval(is_null($forceAnonymous) ? is_int($name) : $forceAnonymous);
+        $nameChild = $anonymous
+            ? new PPNode_Hash_Attr('index', intval($name))
+            : new PPNode_Hash_Text($name);
+        $nameNode->addChild($nameChild);
+        $valueNode = ($value instanceof PPNode_Hash_Tree && $value->getName() === 'value')
+            ? $value
+            : PPNode_Hash_Tree::newWithText('value', $value);
+        $newNode = new PPNode_Hash_Tree('part');
+        $newNode->addChild($nameNode);
+        if (!$anonymous) {
+            $newNode->addChild(new PPNode_Hash_Text('='));
+        }
+
+        $newNode->addChild($valueNode);
+        return $newNode;
+    }
+
+    /**
+     * createTemplateNode
+     *
+     * @param mixed $templateName
+     *
+     * @return PPNode_Hash_Tree
+     */
+    private static function createTemplateNode($templateName)
+    {
+        $newTemplate = new PPNode_Hash_Tree('template');
+        $titleNode = PPNode_Hash_Tree::newWithText('title', $templateName);
+        $newTemplate->addChild($titleNode);
+
+        return $newTemplate;
     }
 
     private static function isLink(PPNode $node = null)
