@@ -75,18 +75,23 @@ class Riven
      */
     public static function doCleanSpace($text, array $args, Parser $parser, PPFrame $frame)
     {
-        $output = preg_replace('#<!--.*?-->#s', '', $text);
+        $mode = ParserHelper::getArgumentValue(self::NA_MODE, $args, 'original');
+        $output = $text;
+        if ($mode != 'original') {
+            $output = preg_replace('#<!--.*?-->#s', '', $output);
+        }
+
         $output = trim($output);
-        $mode = ParserHelper::getMagicValue(self::NA_MODE, $args, 'original');
         // show($mode);
         $modeWord = ParserHelper::findMagicID($mode);
         // show($modeWord);
         switch ($modeWord) {
+                /*
             case self::AV_RECURSIVE:
                 $output = self::cleanSpacePP($output, $parser, $frame, true);
-                break;
+                break; */
             case self::AV_TOP:
-                $output = self::cleanSpacePP($output, $parser, $frame, false);
+                $output = self::cleanSpacePP($output, $parser, $frame);
                 break;
             default:
                 $output = self::cleanSpaceOriginal($output);
@@ -130,7 +135,7 @@ class Riven
         $offset = 0;
         $output = '';
         $lastVal = null;
-        $protectRows = intval(ParserHelper::getMagicValue(self::NA_PROTROWS, $args, 1));
+        $protectRows = intval(ParserHelper::getArgumentValue(self::NA_PROTROWS, $args, 1));
         do {
             $lastVal = self::parseTable($parser, $input, $offset, $protectRows);
             $output .= $lastVal;
@@ -541,106 +546,50 @@ class Riven
      * @return void
      *
      */
-    private static function cleanSpaceNode(PPFrame $frame, PPNode $node, $recurse)
+    private static function cleanSpaceNode(PPFrame $frame, PPNode $node)
     {
-        // This used to be *much* simpler, but MW 1.28+ managed to make their pre-processor design even worse than it
-        // already was, so this ballooned in order to handle the new way of doing things. It might benefit from
-        // converting it to a new node tree and then being sent to $frame->expand(), but that seemed like it might also
-        // run into just as many problems as this did.
+        // This had been a fairly simple method but changes in MW 1.28 made it much more complex. The former
+        // "recursive" mode was also abandoned for this reason.
         $output = '';
+        $wantCloseNode = false;
+        $doTrim = false;
         while ($node) {
             $nextNode = $node->getNextSibling();
-            if ($node instanceof PPNode_Hash_Text) {
-                $value = preg_replace('#\]\]\s+(' . self::TAG_REGEX . ')#', ']]$1', $node->value, 1);
-
-                // Remove space between a trimmable and a link. (Links always start with '[['.)
-                if ($nextNode && self::isTrimmable($nextNode)) {
-                    if (substr($value, 0, 2) == '[[') {
-                        $trimEnd = rtrim($value);
-                        if (substr($trimEnd, strlen($trimEnd) - 2) == ']]') {
-                            $value = $trimEnd;
-                        } else {
-                            $value = preg_replace('#(' . self::TAG_REGEX  . ')\s*\Z#', '$1', $value);
-                        }
-                    }
+            if (self::isLink($node)) {
+                $wantCloseNode = true;
+                $value = $node->value;
+                if ($doTrim) {
+                    $value = ltrim($value);
+                    $doTrim = false;
                 }
 
-                $output .= $value;
-            } elseif ($node instanceof PPNode_Hash_Tree) {
-                if ($recurse) {
-                    $name = $node->getName();
-                    show($name);
-                    $children = $node->getRawChildren();
-                    show($children);
-                    if ($name === 'template') {
-                        $output .= self::iterateBraces($frame, $node, 2);
-                    } elseif ($name === 'tplarg') {
-                        $output .= self::iterateBraces($frame, $node, 3);
-                    } else {
-                        $output .= $frame->expand($node, PPFrame::RECOVER_ORIG);
-                    }
-
-                    // If this a template followed by whitespace and then by something trimmable, ignore the whitespace.
-                    if ($recurse && $nextNode instanceof PPNode_Hash_Text && !strlen(trim($nextNode->value))) {
-                        $nodePlus2 = $nextNode->getNextSibling();
-                        if (self::isTrimmable($nodePlus2)) {
-                            // $node = $nextNode; Not necessary unless we have something acting on $node after this.
-                            $nextNode = $nodePlus2;
+                if ($wantCloseNode) {
+                    $offset = strpos($value, ']]');
+                    if ($offset) {
+                        $doTrim = true;
+                        $wantCloseNode = false;
+                        // show($nextNode);
+                        $linkEnd = substr($value, 0, $offset + 2);
+                        $remainder = ltrim(substr($node->value, $offset + 2));
+                        if (!strlen($remainder)) {
+                            $value = $linkEnd;
                         }
                     }
-                } else {
-                    $output .= $frame->expand($node, PPFrame::RECOVER_ORIG);
-                }
-            } elseif ($node instanceof PPNode_Hash_Array) {
-                show('Array!');
-                if ($recurse) {
-                    $children = $node->getChildren();
-                    if ($children) {
-                        foreach ($children as $child) {
-                            $output .= '|' . self::cleanSpaceNode($frame, $child, $recurse);
-                        }
-                    }
-                } else {
-                    $output .= '|' . $frame->expand(PPFrame::RECOVER_ORIG);
                 }
             } else {
-                show('Other type found: ', get_class($node), "\n", $node);
+                $doTrim = true;;
+                $value = $frame->expand($node, PPFrame::RECOVER_ORIG);
             }
 
+            if ($nextNode && self::isLink($nextNode)) {
+                $value = preg_replace('#(' . self::TAG_REGEX . ')\s*\Z#', '$1', $value, 1);
+            }
+
+            $output .= $value;
             $node = $nextNode;
         }
 
         return $output;
-    }
-
-    private static function iterateBraces(PPFrame $frame, PPNode_Hash_Tree $node, $braceCount)
-    {/*
-        $bits = $node->splitTemplate();
-        $title = $bits['title']->getRawChildren();
-        show('Title: ', $title);
-        $output = str_repeat('{', $braceCount) . $title[0];
-        $first = false;
-        foreach ($title[1]->value as $child) {
-            show('Child: ', get_class($child), "\n", $child);
-            if ($first) {
-                $first = false;
-            } else {
-                $output .= '|';
-            }
-
-            $output .= self::cleanSpaceNode($frame, $child, true);
-        }
-
-        $parts = $bits['parts'];
-        if ($parts) {
-            foreach ($parts->value as $child) {
-                show('Child: ', get_class($child), "\n", $child);
-                $output .= '|' . self::cleanSpaceNode($frame, $child, true);
-            }
-        }
-        $output .= str_repeat('}', $braceCount);
-        return $output;*/
-        return '';
     }
 
     /**
@@ -669,14 +618,14 @@ class Riven
      * @return [type]
      *
      */
-    private static function cleanSpacePP($text, Parser $parser, PPFrame $frame, $recurse)
+    private static function cleanSpacePP($text, Parser $parser, PPFrame $frame)
     {
         $preprocessor = new Preprocessor_Hash($parser);
         $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
         $rootNode = $preprocessor->preprocessToObj($text, $flag);
         // show($rootNode);
 
-        return self::cleanSpaceNode($frame, $rootNode->getFirstChild(), $recurse);
+        return self::cleanSpaceNode($frame, $rootNode->getFirstChild());
     }
 
     /**
@@ -722,23 +671,17 @@ class Riven
         return $map;
     }
 
-    private static function isTrimmable(PPNode $node = null, $text = null)
+    /**
+     * Determines of the node provided is a link.
+     *
+     * @param PPNode $node The node to check.
+     *
+     * @return bool True if the node is a link; otherwise, false.
+     *
+     */
+    private static function isLink(PPNode $node)
     {
-        // Is it a template?
-        if ($node instanceof PPTemplateFrame_Hash) {
-            return true;
-        }
-
-        if ($node instanceof PPNode_Hash_Text) {
-            // Is it a link?
-            if (substr($node->value, 0, 2) == '[[') {
-                return true;
-            }
-
-            // Is it something that looks like an HTML tag?
-            $text = ParserHelper::nullCoalesce($text, $node->value);
-            return preg_match('#\A\s*' . self::TAG_REGEX  . '#s', $node->value);
-        }
+        return $node instanceof PPNode_Hash_Text && substr($node->value, 0, 2) === '[[';
     }
 
     private static function mapToTable($map)
