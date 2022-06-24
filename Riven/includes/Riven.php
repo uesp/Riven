@@ -32,28 +32,52 @@ class Riven
 
     const VR_SKINNAME = 'riven-skinname'; // From DynamicFunctions
 
-    // From DynamicFunctions
+    const TAG_REGEX = '</?[0-9A-Za-z]+[^>]*>';
+
     /**
-     * doArg
+     * Retrieves an argument from the URL.
      *
-     * @param Parser $parser
-     * @param string $name
-     * @param string $default
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param array $args Function arguments:
+     *     1 = The name of the argument to look for.
+     *     2 = If the argument above isn't found, return this value instead.
      *
-     * @return string
+     * @return The value found or the default value. Failing all else,
      */
     public static function doArg(Parser $parser, PPFrame $frame, array $args)
     {
-        $values = ParserHelper::expandArray($frame, $args);
+        $parser->getOutput()->updateCacheExpiry(0);
+        $arg = $frame->expand($args[0]);
+        $default = isset($args[1]) ? $frame->expand($args[1]) : '';
         $request = RequestContext::getMain()->getRequest();
-        return $request->getVal($values[0], isset($values[1]) ? $values[1] : '');
+        return $request->getVal($arg, $default);
     }
 
+    /**
+     * Removes whitespace surrounding HTML tags, links and other parser functions.
+     *
+     * @param mixed $text The text to clean.
+     * @param array $args The tag arguments:
+     *     debug = Set to PHP true to show cleaned code on-screen during Show Preview. Set to 'always' to show even when saved.
+     *     mode = Select strategy for removal. Note that in the first two modes, this is an intelligent search and will
+     *                    only match what the wiki identifies as links and templates.
+     *         top:       Only remove space at the top-most level...will not search inside links or templates (but can
+     *                    search inside tags).
+     *         recursive: Search everything.
+     *         original:  This is the default, using The original regex-based search. This can sometimes result in
+     *                    unwanted matches.
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The templare frame in use.
+     *
+     * @return string Cleaned text.
+     *
+     */
     public static function doCleanSpace($text, array $args, Parser $parser, PPFrame $frame)
     {
-        $output = trim($text);
-        $output = preg_replace('#<!--.*?-->#', '', $output);
-        $mode = ParserHelper::getMagicValue(self::NA_MODE, $args, 'none');
+        $output = preg_replace('#<!--.*?-->#s', '', $text);
+        $output = trim($output);
+        $mode = ParserHelper::getMagicValue(self::NA_MODE, $args, 'original');
         // show($mode);
         $modeWord = ParserHelper::findMagicID($mode);
         // show($modeWord);
@@ -74,7 +98,7 @@ class Riven
         }
 
         if (!$parser->getOptions()->getIsPreview() && $parser->getTitle()->getNamespace() == NS_TEMPLATE) {
-            // categories and trails are stripped on ''any'' template page, not just when directly calling the template
+            // Categories and trails are stripped on ''any'' template page, not just when directly calling the template
             // (but only in non-preview mode)
             // save categories before processing
             $precats = $parser->getOutput()->getCategories();
@@ -87,8 +111,6 @@ class Riven
         return $parser->recursiveTagParse($output, $frame);
     }
 
-    // unset links that are removed (remove from wantedlinks)?
-    // fix issues with <small> tags ... if cell is empty except for paired tags, consider it empty
     public static function doCleanTable($text, $args = array(), Parser $parser, PPFrame $frame)
     {
         $input = $parser->recursiveTagParse($text, $frame);
@@ -238,6 +260,7 @@ class Riven
      */
     public static function doPickFrom(Parser $parser, PPFrame $frame, array $args)
     {
+        $parser->getOutput()->updateCacheExpiry(0);
         list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
@@ -312,17 +335,16 @@ class Riven
         }
 
         if ($low != $high) {
-            $frame->setVolatile();
+            $parser->getOutput()->updateCacheExpiry(0);
         }
 
         return ($low > $high) ? mt_rand($high, $low) : mt_rand($low, $high);
     }
 
-    // From DynamicFunctions
     /**
-     * doSkinName
+     * Gets the user's current skin.
      *
-     * @param Parser $parser
+     * @param Parser $parser The parser in use.
      *
      * @return string
      */
@@ -454,6 +476,16 @@ class Riven
         ]);
     }
 
+    /**
+     * Removes emptry rows from the output.
+     *
+     * @param mixed $input The text to work on.
+     * @param int $protectRows The number of rows to protect at the top of the table.
+     *
+     * @return TableCell[] A map of every cell in the table. Those with spans will appear as individual cells with a link
+     * back to the home cell.
+     *
+     */
     private static function cleanRows($input, $protectRows = 1)
     {
         // show("Clean Rows In:\n", $input);
@@ -500,41 +532,88 @@ class Riven
         return self::mapToTable($map);
     }
 
+    /**
+     * Cleans the table using the MediaWiki pre-processor. This is used for both "top" and "recursive" modes.
+     *
+     * @param PPNode $node The pre-processor node to clean.
+     * @param mixed $recurse Whether to recurse into the node.
+     *
+     * @return void
+     *
+     */
     private static function cleanSpaceNode(PPNode $node, $recurse)
     {
-        $prevNode = null;
+        $output = '';
+        $nextNode = null;
         while ($node) {
+            $nextNode = $node->getNextSibling();
             if ($node instanceof PPNode_Hash_Text) {
-                // Remove space at beginning and end of text, and around anything that looks like a valid tag.
-                $trimmed = preg_replace('#\s*(</?[0-9A-Za-z]+[^>]*>)\s*#', '$1', trim($node->value));
-                if (self::isLink($prevNode)) {
-                    // Also remove space after a link's closing ]]. Only do this once - anything else is not a link closer.
-                    $trimmed = preg_replace('#]]\s+#', ']]', $trimmed, 1);
+                $value = preg_replace('#\]\]\s+(' . self::TAG_REGEX . ')#', ']]$1', $node->value, 1);
+
+                // Remove space between a trimmable and a link. (Links always start with '[['.)
+                if ($nextNode && self::isTrimmable($nextNode)) {
+                    if (substr($value, 0, 2) == '[[') {
+                        $trimEnd = rtrim($value);
+                        if (substr($trimEnd, strlen($trimEnd) - 2) == ']]') {
+                            $value = $trimEnd;
+                        } else {
+                            $value = preg_replace('#(' . self::TAG_REGEX  . ')\s*\Z#', '$1', $value);
+                        }
+                    }
                 }
 
-                $node->value = $trimmed;
-            } elseif ($recurse && $node->getFirstChild()) {
-                self::cleanSpaceNode($node->getFirstChild(), true);
+                $output .= $value;
+            } elseif ($recurse && $node instanceof PPTemplateFrame_Hash) {
+                $output .= '{{' . self::cleanSpaceNode($node->getFirstChild(), true) . '}}';
+
+                // If this a template followed by whitespace and then by something trimmable, ignore the whitespace.
+                if ($recurse && $nextNode instanceof PPNode_Hash_Text && !strlen(trim($nextNode->value))) {
+                    $nodePlus2 = $nextNode->getNextSibling();
+                    if (self::isTrimmable($nodePlus2)) {
+                        // $node = $nextNode; Not necessary unless we have something acting on $node after this.
+                        $nextNode = $nodePlus2;
+                    }
+                }
             }
 
-            $prevNode = $node;
-            $node = $node->getNextSibling();
+            $node = $nextNode;
         }
+
+        return $output;
     }
 
+    /**
+     * Cleans the text according to the original regex-based approach. This no longer includes the breadcrumb
+     * functionality from the original MetaTemplate, as that no longer seems to apply to the trails. Looking through
+     * the history, I'm not sure if it ever did.
+     *
+     * @param mixed $text The original text inside the <cleanspace> tags.
+     *
+     * @return string The replacement text.
+     *
+     */
     private static function cleanSpaceOriginal($text)
     {
         return preg_replace('/([\]\}\>])\s+([\<\{\[])/s', '$1$2', $text);
     }
 
+    /**
+     * Cleans the text using the pre-processor.
+     *
+     * @param mixed $text
+     * @param Parser $parser
+     * @param PPFrame $frame
+     * @param mixed $recurse
+     *
+     * @return [type]
+     *
+     */
     private static function cleanSpacePP($text, Parser $parser, PPFrame $frame, $recurse)
     {
         $preprocessor = new Preprocessor_Hash($parser);
         $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
         $rootNode = $preprocessor->preprocessToObj($text, $flag);
-        self::cleanSpaceNode($rootNode->getFirstChild(), $recurse);
-
-        return $frame->expand($rootNode, PPFrame::RECOVER_ORIG);
+        return self::cleanSpaceNode($rootNode->getFirstChild(), $recurse);
     }
 
     /**
@@ -580,55 +659,23 @@ class Riven
         return $map;
     }
 
-    /**
-     * createPartNode
-     *
-     * @param string|int $name
-     * @param mixed $value
-     * @param bool $forceAnonymous
-     *
-     * @return PPNode_Hash_Tree
-     */
-    private static function createPartNode($name, $value, $forceAnonymous = false)
+    private static function isTrimmable(PPNode $node = null, $text = null)
     {
-        $nameNode = new PPNode_Hash_Tree('name');
-        $anonymous = boolval(is_null($forceAnonymous) ? is_int($name) : $forceAnonymous);
-        $nameChild = $anonymous
-            ? new PPNode_Hash_Attr('index', intval($name))
-            : new PPNode_Hash_Text($name);
-        $nameNode->addChild($nameChild);
-        $valueNode = ($value instanceof PPNode_Hash_Tree && $value->getName() === 'value')
-            ? $value
-            : PPNode_Hash_Tree::newWithText('value', $value);
-        $newNode = new PPNode_Hash_Tree('part');
-        $newNode->addChild($nameNode);
-        if (!$anonymous) {
-            $newNode->addChild(new PPNode_Hash_Text('='));
+        // Is it a template?
+        if ($node instanceof PPTemplateFrame_Hash) {
+            return true;
         }
 
-        $newNode->addChild($valueNode);
-        return $newNode;
-    }
+        if ($node instanceof PPNode_Hash_Text) {
+            // Is it a link?
+            if (substr($node->value, 0, 2) == '[[') {
+                return true;
+            }
 
-    /**
-     * createTemplateNode
-     *
-     * @param mixed $templateName
-     *
-     * @return PPNode_Hash_Tree
-     */
-    private static function createTemplateNode($templateName)
-    {
-        $newTemplate = new PPNode_Hash_Tree('template');
-        $titleNode = PPNode_Hash_Tree::newWithText('title', $templateName);
-        $newTemplate->addChild($titleNode);
-
-        return $newTemplate;
-    }
-
-    private static function isLink(PPNode $node = null)
-    {
-        return $node instanceof PPNode_Hash_Text && $node->value == '[[';
+            // Is it something that looks like an HTML tag?
+            $text = ParserHelper::nullCoalesce($text, $node->value);
+            return preg_match('#\A\s*' . self::TAG_REGEX  . '#s', $node->value);
+        }
     }
 
     private static function mapToTable($map)
