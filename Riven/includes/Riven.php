@@ -541,10 +541,13 @@ class Riven
      * @return void
      *
      */
-    private static function cleanSpaceNode(PPNode $node, $recurse)
+    private static function cleanSpaceNode(PPFrame $frame, PPNode $node, $recurse)
     {
+        // This used to be *much* simpler, but MW 1.28+ managed to make their pre-processor design even worse than it
+        // already was, so this ballooned in order to handle the new way of doing things. It might benefit from
+        // converting it to a new node tree and then being sent to $frame->expand(), but that seemed like it might also
+        // run into just as many problems as this did.
         $output = '';
-        $nextNode = null;
         while ($node) {
             $nextNode = $node->getNextSibling();
             if ($node instanceof PPNode_Hash_Text) {
@@ -563,23 +566,81 @@ class Riven
                 }
 
                 $output .= $value;
-            } elseif ($recurse && $node instanceof PPTemplateFrame_Hash) {
-                $output .= '{{' . self::cleanSpaceNode($node->getFirstChild(), true) . '}}';
-
-                // If this a template followed by whitespace and then by something trimmable, ignore the whitespace.
-                if ($recurse && $nextNode instanceof PPNode_Hash_Text && !strlen(trim($nextNode->value))) {
-                    $nodePlus2 = $nextNode->getNextSibling();
-                    if (self::isTrimmable($nodePlus2)) {
-                        // $node = $nextNode; Not necessary unless we have something acting on $node after this.
-                        $nextNode = $nodePlus2;
+            } elseif ($node instanceof PPNode_Hash_Tree) {
+                if ($recurse) {
+                    $name = $node->getName();
+                    show($name);
+                    $children = $node->getRawChildren();
+                    show($children);
+                    if ($name === 'template') {
+                        $output .= self::iterateBraces($frame, $node, 2);
+                    } elseif ($name === 'tplarg') {
+                        $output .= self::iterateBraces($frame, $node, 3);
+                    } else {
+                        $output .= $frame->expand($node, PPFrame::RECOVER_ORIG);
                     }
+
+                    // If this a template followed by whitespace and then by something trimmable, ignore the whitespace.
+                    if ($recurse && $nextNode instanceof PPNode_Hash_Text && !strlen(trim($nextNode->value))) {
+                        $nodePlus2 = $nextNode->getNextSibling();
+                        if (self::isTrimmable($nodePlus2)) {
+                            // $node = $nextNode; Not necessary unless we have something acting on $node after this.
+                            $nextNode = $nodePlus2;
+                        }
+                    }
+                } else {
+                    $output .= $frame->expand($node, PPFrame::RECOVER_ORIG);
                 }
+            } elseif ($node instanceof PPNode_Hash_Array) {
+                show('Array!');
+                if ($recurse) {
+                    $children = $node->getChildren();
+                    if ($children) {
+                        foreach ($children as $child) {
+                            $output .= '|' . self::cleanSpaceNode($frame, $child, $recurse);
+                        }
+                    }
+                } else {
+                    $output .= '|' . $frame->expand(PPFrame::RECOVER_ORIG);
+                }
+            } else {
+                show('Other type found: ', get_class($node), "\n", $node);
             }
 
             $node = $nextNode;
         }
 
         return $output;
+    }
+
+    private static function iterateBraces(PPFrame $frame, PPNode_Hash_Tree $node, $braceCount)
+    {/*
+        $bits = $node->splitTemplate();
+        $title = $bits['title']->getRawChildren();
+        show('Title: ', $title);
+        $output = str_repeat('{', $braceCount) . $title[0];
+        $first = false;
+        foreach ($title[1]->value as $child) {
+            show('Child: ', get_class($child), "\n", $child);
+            if ($first) {
+                $first = false;
+            } else {
+                $output .= '|';
+            }
+
+            $output .= self::cleanSpaceNode($frame, $child, true);
+        }
+
+        $parts = $bits['parts'];
+        if ($parts) {
+            foreach ($parts->value as $child) {
+                show('Child: ', get_class($child), "\n", $child);
+                $output .= '|' . self::cleanSpaceNode($frame, $child, true);
+            }
+        }
+        $output .= str_repeat('}', $braceCount);
+        return $output;*/
+        return '';
     }
 
     /**
@@ -613,7 +674,9 @@ class Riven
         $preprocessor = new Preprocessor_Hash($parser);
         $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
         $rootNode = $preprocessor->preprocessToObj($text, $flag);
-        return self::cleanSpaceNode($rootNode->getFirstChild(), $recurse);
+        // show($rootNode);
+
+        return self::cleanSpaceNode($frame, $rootNode->getFirstChild(), $recurse);
     }
 
     /**
