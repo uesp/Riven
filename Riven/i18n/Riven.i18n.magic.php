@@ -1,6 +1,7 @@
 <?php
 
 $magicWords['en'] = [
+	Riven::AV_ORIGINAL => [0, 'original'],
 	Riven::AV_RECURSIVE => [0, 'recursive'],
 	Riven::AV_TOP => [0, 'top'],
 
@@ -11,6 +12,7 @@ $magicWords['en'] = [
 	Riven::NA_SEPARATOR => [0, 'separator'],
 
 	Riven::PF_ARG => [0, 'arg'],
+	Riven::PF_FINDFIRST => [0, 'findfirst'],
 	Riven::PF_IFEXISTX => [0, 'ifexistx'],
 	Riven::PF_INCLUDE => [0, 'include'],
 	Riven::PF_PICKFROM => [0, 'pickfrom'],

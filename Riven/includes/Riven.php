@@ -3,36 +3,48 @@
 namespace MediaWiki\Extension\MetaTemplate;
 */
 
+use MediaWiki\MediaWikiServices;
+
 /**
- * [Description Riven]
+ * A collection of various routines that primarily help in template editing. These were split out from MetaTemplate
+ * and/or DynamicFunctions since they don't rely on the preprocessor in order to work (or if they do, there are
+ * non-preprocessor alternatives).
+ *
+ * The rarely used functions are all put into "Riven-Pages Using <feature>" tracking categories.
  */
 class Riven
 {
+    const AV_ORIGINAL  = 'riven-original';
     const AV_RECURSIVE = 'riven-recursive';
-    const AV_TOP = 'riven-top';
+    const AV_TOP       = 'riven-top';
 
-    const NA_EXPLODE = 'riven-explode';
-    const NA_MODE = 'riven-mode';
-    const NA_PROTROWS = 'riven-protectrows';
-    const NA_SEED = 'riven-seed';
+    const NA_EXPLODE   = 'riven-explode';
+    const NA_MODE      = 'riven-mode';
+    const NA_PROTROWS  = 'riven-protectrows';
+    const NA_SEED      = 'riven-seed';
     const NA_SEPARATOR = 'riven-separator';
 
-    const PF_ARG = 'riven-arg'; // From DynamicFunctions
-    const PF_IFEXISTX = 'riven-ifexistx';
-    const PF_INCLUDE = 'riven-include';
-    const PF_PICKFROM = 'riven-pickfrom';
-    const PF_RAND = 'riven-rand'; // From DynamicFunctions
-    const PF_SPLITARGS = 'riven-splitargs';
-    const PF_TRIMLINKS = 'riven-trimlinks';
+    const PF_ARG        = 'riven-arg'; // From DynamicFunctions
+    const PF_FINDFIRST  = 'riven-findfirst';
+    const PF_IFEXISTX   = 'riven-ifexistx';
+    const PF_INCLUDE    = 'riven-include';
+    const PF_PICKFROM   = 'riven-pickfrom';
+    const PF_RAND       = 'riven-rand'; // From DynamicFunctions
+    const PF_SPLITARGS  = 'riven-splitargs';
+    const PF_TRIMLINKS  = 'riven-trimlinks';
 
     const TG_CLEANSPACE = 'riven-cleanspace';
     const TG_CLEANTABLE = 'riven-cleantable';
 
+    const TRACKING_ARGS        = 'riven-tracking-args';
     const TRACKING_EXPLODEARGS = 'riven-tracking-explodeargs';
+    const TRACKING_PICKFROM    = 'riven-tracking-pickfrom';
+    const TRACKING_RAND        = 'riven-tracking-rand';
+    const TRACKING_SKINNAME    = 'riven-tracking-skinname';
 
     const VR_SKINNAME = 'riven-skinname'; // From DynamicFunctions
 
-    const TAG_REGEX = '</?[0-9A-Za-z]+[^>]*>';
+    const TAG_REGEX = '</?[0-9A-Za-z]+(\s[^>]*)?>';
 
     /**
      * Retrieves an argument from the URL.
@@ -40,13 +52,14 @@ class Riven
      * @param Parser $parser The parser in use.
      * @param PPFrame $frame The template frame in use.
      * @param array $args Function arguments:
-     *     1 = The name of the argument to look for.
-     *     2 = If the argument above isn't found, return this value instead.
+     *     1: The name of the argument to look for.
+     *     2: If the argument above isn't found, return this value instead.
      *
      * @return The value found or the default value. Failing all else,
      */
     public static function doArg(Parser $parser, PPFrame $frame, array $args)
     {
+        $parser->addTrackingCategory(self::TRACKING_ARGS);
         $parser->getOutput()->updateCacheExpiry(0);
         $arg = $frame->expand($args[0]);
         $default = isset($args[1]) ? $frame->expand($args[1]) : '';
@@ -59,14 +72,15 @@ class Riven
      *
      * @param mixed $text The text to clean.
      * @param array $args The tag arguments:
-     *     debug = Set to PHP true to show cleaned code on-screen during Show Preview. Set to 'always' to show even when saved.
-     *     mode = Select strategy for removal. Note that in the first two modes, this is an intelligent search and will
-     *                    only match what the wiki identifies as links and templates.
+     *     mode:  Select strategy for removal. Note that in the first two modes, this is an intelligent search and will
+     *            only match what the wiki identifies as links and templates.
      *         top:       Only remove space at the top-most level...will not search inside links or templates (but can
      *                    search inside tags).
-     *         recursive: Search everything.
+     *         recursive: (disabled for now) Search everything.
      *         original:  This is the default, using The original regex-based search. This can sometimes result in
      *                    unwanted matches.
+     *     debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show even
+     *            when saved.
      * @param Parser $parser The parser in use.
      * @param PPFrame $frame The templare frame in use.
      *
@@ -75,16 +89,16 @@ class Riven
      */
     public static function doCleanSpace($text, array $args, Parser $parser, PPFrame $frame)
     {
-        $mode = ParserHelper::getArgumentValue(self::NA_MODE, $args, 'original');
+        $mode = ParserHelper::getArgumentValue(self::NA_MODE, $args);
+        // show('Mode: ', $mode);
+        $modeWord = ParserHelper::findMagicID($mode, self::AV_ORIGINAL);
+        // show('ModeWord: ', $modeWord);
         $output = $text;
-        if ($mode != 'original') {
+        if ($modeWord !== self::AV_ORIGINAL) {
             $output = preg_replace('#<!--.*?-->#s', '', $output);
         }
 
         $output = trim($output);
-        // show($mode);
-        $modeWord = ParserHelper::findMagicID($mode);
-        // show($modeWord);
         switch ($modeWord) {
                 /*
             case self::AV_RECURSIVE:
@@ -99,12 +113,12 @@ class Riven
         }
 
         if (ParserHelper::checkDebugMagic($parser, $args)) {
-            return ['<pre>' . htmlspecialchars($output) . '</pre>', 'markerType' => 'nowiki'];
+            return ParserHelper::formatTagForDebug($output, true);
         }
 
+        // Categories and trails are stripped on ''any'' template page, not just when directly calling the template
+        // (but not in pre view mode).
         if (!$parser->getOptions()->getIsPreview() && $parser->getTitle()->getNamespace() == NS_TEMPLATE) {
-            // Categories and trails are stripped on ''any'' template page, not just when directly calling the template
-            // (but only in non-preview mode)
             // save categories before processing
             $precats = $parser->getOutput()->getCategories();
             $output = $parser->recursiveTagParse($output, $frame);
@@ -113,10 +127,25 @@ class Riven
             return $output;
         }
 
-        return $parser->recursiveTagParse($output, $frame);
+        $output = $parser->recursiveTagParse($output, $frame);
+        return $output;
     }
 
-    public static function doCleanTable($text, $args = array(), Parser $parser, PPFrame $frame)
+    /**
+     * Cleans a table of all empty rows.
+     *
+     * @param mixed $text The text containing the tables to clean.
+     * @param array $args The tag arguments:
+     *     protectrows: The number of rows at the top of the table that will not be removed no matter what.
+     *     debug:       Set to PHP true to show the cleaned table code on-screen during Show Preview. Set to 'always'
+     *                  to show even when saved.
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The templare frame in use.
+     *
+     * @return string Cleaned text.
+     *
+     */
+    public static function doCleanTable($text, $args, Parser $parser, PPFrame $frame)
     {
         $input = $parser->recursiveTagParse($text, $frame);
         $isPreview = $parser->getOptions()->getIsPreview();
@@ -144,22 +173,50 @@ class Riven
         $after = substr($input, $offset);
         $output .= $after;
 
-        if (strlen($output > 0) && ParserHelper::checkDebugMagic($parser, $args)) {
+        $debug = ParserHelper::checkDebugMagic($parser, $args);
+        if (strlen($output) > 0 && $debug) {
             $output = $parser->recursiveTagParseFully($output);
-            return ['<pre>' . htmlspecialchars($output) . '</pre>', 'markerType' => 'nowiki'];
         }
 
-        return $output;
+        return ParserHelper::formatTagForDebug($output, $debug);
+    }
+
+    public static function doFindFirst(Parser $parser, PPFrame $frame, array $args)
+    {
+        // This is currently just a loop over the core of #ifexistsx. It may benefit from using a database query
+        // or LinkBatch instead.
+        list($magicArgs, $values) = ParserHelper::getMagicArgs(
+            $frame,
+            $args,
+            ParserHelper::NA_IF,
+            ParserHelper::NA_IFNOT
+        );
+
+        if (ParserHelper::checkIfs($magicArgs)) {
+            foreach ($values as $title) {
+                if (self::existsCommon($parser, $title)) {
+                    return $title;
+                }
+            }
+        }
+
+        return '';
     }
 
     /**
-     * doIfExistX
+     * Checks for the existence of a page without tagging it as a Wanted Page.
      *
-     * @param Parser $parser
-     * @param PPFrame $frame
-     * @param array $args
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param array $args Function arguments:
+     *         1: The page to look for.
+     *         2: The return value if the page is found.
+     *         3: The return value if the page is not found.
+     *        if: A condition that must be true in order for this function to run.
+     *     ifnot: A condition that must be false in order for this function to run.
      *
-     * @return string
+     * @return string The result of the check or an empty string if the if/ifnot failed.
+     *
      */
     public static function doIfExistX(Parser $parser, PPFrame $frame, array $args)
     {
@@ -169,61 +226,32 @@ class Riven
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT
         );
-        $titleText = trim($frame->expand(ParserHelper::arrayGet($values, 0, '')));
-        $title = Title::newFromText($titleText);
-        if ($title && ParserHelper::checkIfs($magicArgs)) {
-            $then = ParserHelper::arrayGet($values, 1);
-            $else = ParserHelper::arrayGet($values, 2);
-            $retval = $else;
-            $parser->getFunctionLang()->findVariantLink($titleText, $title, true);
-            switch ($title->getNamespace()) {
-                case NS_MEDIA:
-                    if ($parser->incrementExpensiveFunctionCount()) {
-                        $file = wfFindFile($title);
-                        if ($file) {
-                            $parser->getOutput()->addImage(
-                                $file->getName(),
-                                $file->getTimestamp(),
-                                $file->getSha1()
-                            );
-
-                            $retval = $file->exists() ? $then : $else;
-                        }
-                    }
-
-                    break;
-                case NS_SPECIAL:
-                    $retval = SpecialPageFactory::exists($title->getDBkey()) ? $then : $else;
-                    break;
-                default:
-                    if (!$title->isExternal()) {
-                        $pdbk = $title->getPrefixedDBkey();
-                        $lc = LinkCache::singleton();
-                        if (
-                            $lc->getGoodLinkID($pdbk) !== 0 ||
-                            (!$lc->isBadLink($pdbk) &&
-                                $parser->incrementExpensiveFunctionCount() &&
-                                $title->exists())
-                        ) {
-                            $retval = $then;
-                        }
-                    }
-
-                    break;
-            }
+        if (!ParserHelper::checkIfs($magicArgs)) {
+            return '';
         }
 
-        return trim($frame->expand($retval));
+        $titleText = trim($frame->expand(ParserHelper::arrayGet($values, 0, '')));
+        $result = self::existsCommon($parser, $titleText)
+            ? 1
+            : 2;
+
+        return trim($frame->expand(ParserHelper::arrayGet($values, $result)));
     }
 
     /**
-     * doInclude
+     * Transcludes a page if it exists, but if the page doesn't exist, it will not create either red links or Wanted
+     * Templates entries.
      *
-     * @param Parser $parser
-     * @param PPFrame $frame
-     * @param array $args
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param array $args Function arguments:
+     *     debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show even
+     *            when saved.
+     *        if: A condition that must be true in order for this function to run.
+     *     ifnot: A condition that must be false in order for this function to run.
      *
      * @return string
+     *
      */
     public static function doInclude(Parser $parser, PPFrame $frame, array $args)
     {
@@ -236,35 +264,37 @@ class Riven
         );
 
         if (count($values) > 0 && ParserHelper::checkIfs($magicArgs)) {
-            $nodes = '';
-            // show('Values: ', $values);
+            $output = '';
             foreach ($values as $pageName) {
                 $pageName = $frame->expand($pageName);
-                // show($pageName);
                 $t = Title::newFromText($pageName, NS_TEMPLATE);
                 if ($t && $t->exists()) {
                     // show('Exists!');
-                    $nodes .= '{{' . $pageName . '}}';
+                    $output .= '{{' . $pageName . '}}';
                 }
             }
-            // show('Nodes: ', $nodes);
 
-            return [$nodes, 'noparse' => ParserHelper::checkDebug($parser, $magicArgs)];
+            return ParserHelper::formatPFForDebug($output, $parser, $magicArgs);
         }
     }
 
-    // IMP: List is still randomized, even if all items will be returned.
     /**
-     * doPickFrom
+     * Randomly picks one or more entries from a list and displays it.
      *
-     * @param Parser $parser
-     * @param PPFrame $frame
-     * @param array $args
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param array $args Function arguments:
+     *            if: A condition that must be true in order for this function to run.
+     *         ifnot: A condition that must be false in order for this function to run.
+     *          seed: The number to use to initialize the random sequence.
+     *     separator: The separator to use between entries. Defaults to \n.
      *
      * @return string
+     *
      */
     public static function doPickFrom(Parser $parser, PPFrame $frame, array $args)
     {
+        $parser->addTrackingCategory(self::TRACKING_PICKFROM);
         $parser->getOutput()->updateCacheExpiry(0);
         list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
@@ -285,7 +315,6 @@ class Riven
             $first = $separator[0];
             if (in_array($first, ['\'', '`', '"']) && $first === substr($separator, -1, 1)) {
                 $separator = substr($separator, 1, -1);
-                $parser->addTrackingCategory('riven-pickfromquotes-category');
             }
         }
 
@@ -308,19 +337,25 @@ class Riven
         return implode($separator, $retval);
     }
 
-    // IMP: Now allows a seed
-    // IMP: Defaults to d6.
     /**
-     * doRand
+     * Picks a random number in the range provided.
      *
-     * @param Parser $parser
-     * @param PPFrame $frame
-     * @param array $args
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param array $args Function arguments:
+     *        1: (See return)
+     *        2: (See return)
+     *     seed: The number to use to initialize the random sequence.
      *
-     * @return int
+     * @return string
+     *     No parameters: Random number between 1-6.
+     *     One parameter: Random number between 1-to.
+     *     Both parameters: Random number between from-to.
+     *
      */
     public static function doRand(Parser $parser, PPFrame $frame, array $args)
     {
+        $parser->addTrackingCategory(self::TRACKING_RAND);
         list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
@@ -351,10 +386,11 @@ class Riven
      *
      * @param Parser $parser The parser in use.
      *
-     * @return string
+     * @return string The name of the current skin.
      */
-    public static function doSkinName()
+    public static function doSkinName(Parser $parser)
     {
+        $parser->addTrackingCategory(self::TRACKING_SKINNAME);
         return RequestContext::getMain()->getSkin()->getSkinName();
     }
 
@@ -371,7 +407,7 @@ class Riven
      */
     public static function doSplitArgs(Parser $parser, PPFrame $frame, array $args)
     {
-        list($magicArgs, $values) = ParserHelper::getMagicArgs(
+        list($magicArgs, $values, $dupes) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_DEBUG,
@@ -385,33 +421,46 @@ class Riven
             return '';
         }
 
+        list($named, $values) = self::splitNamedArgs($frame, $values);
+        $named = array_merge($named, $dupes);
+        foreach ($values as $key => $value) {
+            // show('After: ', $key, '=', $value);
+        }
+
         if (isset($values[1])) {
             // Figure out what we're dealing with and populate appropriately.
-            $checkFormat = $frame->expand($values[1]);
-            if (!is_numeric($checkFormat) && count($values) > 3) {
+            $nargs = $frame->expand($values[1]);
+            if (!is_numeric($nargs) && count($values) > 3) {
                 // Old #explodeargs; can be deleted once all are converted.
-                $values = ParserHelper::expandArray($frame, $values);
-                $nargs = $frame->expand($values[3]);
+                // TODO: check! Logic seems wrong. Probably needs an array_shift.
+                // $templateValues = ParserHelper::expandArray($frame, $values);
+                $separator = $nargs;
                 $templateName = $frame->expand($values[2]);
-                $separator = $checkFormat;
-                $values = explode($separator, $frame->expand($values[0]));
+                $nargs = $frame->expand($values[3]);
                 $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
+                $values = explode($separator, $frame->expand($values[0]));
             } else {
                 $templateName = $frame->expand($values[0]);
-                $nargs = $checkFormat;
-                $values = array_slice($values, 2);
-                if (isset($magicArgs[self::NA_EXPLODE])) {
+                $explode = isset($magicArgs[self::NA_EXPLODE]) ? $magicArgs[self::NA_EXPLODE] : '';
+                $explode = $frame->expand($explode);
+                if (strlen($explode)) {
                     $separator = ParserHelper::arrayGet($magicArgs, self::NA_SEPARATOR, ',');
                     $explode = $frame->expand($magicArgs[self::NA_EXPLODE]);
-                    $values = array_merge(explode($separator, $explode), $values);
-                }
+                    $values = explode($separator, $explode);
+                } else {
+                    $values = array_slice($values, 2);
+                    if (!count($values)) {
+                        $untrimmed = $frame->getNumberedArguments();
+                        $values = [];
+                        foreach ($untrimmed as $value) {
+                            $values[] = trim($value);
+                        }
 
-                if (empty($values)) {
-                    $values = $frame->getNumberedArguments();
-                    foreach ($frame->getNamedArguments() as $key => $value) {
-                        $numKey = intval($key);
-                        if ($numKey > 0) {
-                            $values[$numKey] = $value;
+                        foreach ($frame->getNamedArguments() as $key => $value) {
+                            $numKey = intval($key);
+                            if ($numKey > 0) {
+                                $values[$numKey] = trim($value);
+                            }
                         }
                     }
                 }
@@ -419,30 +468,37 @@ class Riven
         }
 
         $nargs = intval($nargs);
-        if ($nargs == 0) {
+        if (!$nargs) {
             $nargs = count($values);
         }
 
-        list($named, $values) = self::splitNamedArgs($frame, $values);
-        if (count($values) > 0) {
-            $templates = '';
-            for ($index = 0; $index < count($values); $index += $nargs) {
-                $templates .= '{{' . $templateName;
-                for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
-                    $var = ParserHelper::arrayGet($values, $index + $paramNum, '');
-                    $templates .= "|$var";
-                }
+        if (count($values) == 0) {
+            return '';
+        }
 
-                foreach ($named as $name => $value) {
-                    $templates .= "|$name=$value";
+        $output = '';
+        for ($index = 0; $index < count($values); $index += $nargs) {
+            $output .= '{{' . $templateName;
+            for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
+                $value = ParserHelper::arrayGet($values, $index + $paramNum);
+                if (!is_null($value)) {
+                    $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
+                    // We have to use numbered arguments to avoid the possibility that $value is something like
+                    // 'param=value', which is possible with the exploding versions, at least.
+                    $displayNum = $paramNum + 1;
+                    $output .= "|$displayNum=$value";
                 }
-
-                $templates .= '}}';
             }
 
+            foreach ($named as $name => $value) {
+                $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
+                $output .= "|$name=$value";
+            }
 
-            return [$templates, 'noparse' => ParserHelper::checkDebug($parser, $magicArgs)];
+            $output .= '}}';
         }
+
+        return ParserHelper::formatPFForDebug($output, $parser, $magicArgs);
     }
 
     // IMP: Ignores Category and Image links unless they're forced links; better parsing of edge cases (nested links, nowiki, etc.).
@@ -461,6 +517,11 @@ class Riven
             return '';
         }
 
+        /* Test this against the simplicity of:
+            $output = $parser->recursiveTagParse($args[0]);
+            return $parser->replaceLinkHoldersText($output);
+        */
+
         $preprocessor = new Preprocessor_Hash($parser);
         $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
         $rootNode = $preprocessor->preprocessToObj($args[0], $flag);
@@ -471,6 +532,7 @@ class Riven
     public static function init()
     {
         ParserHelper::cacheMagicWords([
+            self::AV_ORIGINAL,
             self::AV_RECURSIVE,
             self::AV_TOP,
             self::NA_EXPLODE,
@@ -479,6 +541,49 @@ class Riven
             self::NA_SEED,
             self::NA_SEPARATOR,
         ]);
+    }
+
+    /**
+     * Maps out a table and converts it to a collection of TableCells.
+     *
+     * @param mixed $input The text of the map to convert.
+     *
+     * @return array A collection of TableCells that represents the table provided.
+     */
+    private static function buildMap($input)
+    {
+        $map = [];
+        $rowNum = 0;
+        preg_match_all('#(<tr[^>]*>)(.*?)</tr\s*>#is', $input, $rawRows, PREG_SET_ORDER);
+        foreach ($rawRows as $rawRow) {
+            $map[$rowNum]['open'] = $rawRow[1];
+            $cellNum = 0;
+            preg_match_all('#<(?<name>t[dh])\s*(?<attribs>[^>]*)>(?<content>.*?)</\1\s*>#s', $rawRow[0], $rawCells, PREG_SET_ORDER);
+            foreach ($rawCells as $rawCell) {
+                $cell = new TableCell($rawCell);
+                while (isset($map[$rowNum][$cellNum])) {
+                    $cellNum++;
+                }
+
+                $map[$rowNum][$cellNum] = $cell;
+                $rowspan = $cell->getRowspan();
+                $colspan = $cell->getColspan();
+                if ($rowspan > 1 || $colspan > 1) {
+                    $spanCell = new TableCell($cell);
+                    for ($r = 0; $r < $rowspan; $r++) {
+                        for ($c = 0; $c < $colspan; $c++) {
+                            if ($r != 0 || $c != 0) {
+                                $map[$rowNum + $r][$cellNum + $c] = $spanCell;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $rowNum++;
+        }
+
+        return $map;
     }
 
     /**
@@ -505,8 +610,8 @@ class Riven
 
             foreach ($row as $cell) {
                 if ($cell instanceof TableCell) {
-                    $content = trim(preg_replace('#\{\{\{[^\}]*\}\}\}#', '', html_entity_decode($cell->getContent())));
-                    $rowHasContent |= !$cell->isHeader() && strlen($content) > 0;
+                    $content = preg_replace('#\{\{\{[^\}]*\}\}\}#', '', html_entity_decode($cell->getContent()));
+                    $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
                     $allHeaders &= $cell->isHeader();
                     if ($cell->getParent()) {
                         $spans[] = $cell->getParent();
@@ -553,6 +658,7 @@ class Riven
         $output = '';
         $wantCloseNode = false;
         $doTrim = false;
+        $node = $node->getFirstChild();
         while ($node) {
             $nextNode = $node->getNextSibling();
             if (self::isLink($node)) {
@@ -566,18 +672,20 @@ class Riven
                 if ($wantCloseNode) {
                     $offset = strpos($value, ']]');
                     if ($offset) {
-                        $doTrim = true;
                         $wantCloseNode = false;
                         // show($nextNode);
                         $linkEnd = substr($value, 0, $offset + 2);
-                        $remainder = ltrim(substr($node->value, $offset + 2));
-                        if (!strlen($remainder)) {
-                            $value = $linkEnd;
-                        }
+                        $remainder = substr($node->value, $offset + 2);
+                        $remainder = preg_replace('#\A\s+(' . self::TAG_REGEX . '|\Z)#', '$1', $remainder, 1);
+                        $doTrim = !strlen($remainder);
+                        $value = $linkEnd . $remainder;
+                        // DoTrim is set to true only
                     }
                 }
+            } elseif ($doTrim && $node instanceof PPNode_Hash_Text && !strLen(trim($node->value)) && self::isTrimmable($nextNode)) {
+                $value = '';
             } else {
-                $doTrim = true;;
+                $doTrim = true;
                 $value = $frame->expand($node, PPFrame::RECOVER_ORIG);
             }
 
@@ -585,6 +693,7 @@ class Riven
                 $value = preg_replace('#(' . self::TAG_REGEX . ')\s*\Z#', '$1', $value, 1);
             }
 
+            // show('Value: ', $value);
             $output .= $value;
             $node = $nextNode;
         }
@@ -620,55 +729,61 @@ class Riven
      */
     private static function cleanSpacePP($text, Parser $parser, PPFrame $frame)
     {
-        $preprocessor = new Preprocessor_Hash($parser);
-        $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
-        $rootNode = $preprocessor->preprocessToObj($text, $flag);
-        // show($rootNode);
-
-        return self::cleanSpaceNode($frame, $rootNode->getFirstChild());
+        $rootNode = $parser->getPreprocessor()->preprocessToObj($text);
+        return self::cleanSpaceNode($frame, $rootNode);
     }
 
     /**
-     * buildMap
+     * Checks if a title by the name of $titleText exists.
      *
-     * @param mixed $input
+     * @param Parser $parser The parser in use.
+     * @param mixed $titleText The title to search for.
      *
-     * @return array
+     * @return boolean True if the file was found; otherwise, false.
+     *
      */
-    private static function buildMap($input)
+    private static function existsCommon(Parser $parser, $titleText)
     {
-        $map = [];
-        $rowNum = 0;
-        preg_match_all('#(<tr[^>]*>)(.*?)</tr\s*>#is', $input, $rawRows, PREG_SET_ORDER);
-        foreach ($rawRows as $rawRow) {
-            $map[$rowNum]['open'] = $rawRow[1];
-            $cellNum = 0;
-            preg_match_all('#<(?<name>t[dh])\s*(?<attribs>[^>]*)>(?<content>.*?)</\1\s*>#s', $rawRow[0], $rawCells, PREG_SET_ORDER);
-            foreach ($rawCells as $rawCell) {
-                $cell = new TableCell($rawCell);
-                while (isset($map[$rowNum][$cellNum])) {
-                    $cellNum++;
-                }
-
-                $map[$rowNum][$cellNum] = $cell;
-                $rowspan = $cell->getRowspan();
-                $colspan = $cell->getColspan();
-                if ($rowspan > 1 || $colspan > 1) {
-                    $spanCell = new TableCell($cell);
-                    for ($r = 0; $r < $rowspan; $r++) {
-                        for ($c = 0; $c < $colspan; $c++) {
-                            if ($r != 0 || $c != 0) {
-                                $map[$rowNum + $r][$cellNum + $c] = $spanCell;
-                            }
-                        }
-                    }
-                }
-            }
-
-            $rowNum++;
+        $title = Title::newFromText($titleText);
+        $parser->getFunctionLang()->findVariantLink($titleText, $title, true);
+        if (!$title) {
+            return false;
         }
 
-        return $map;
+        switch ($title->getNamespace()) {
+            case NS_MEDIA:
+                if ($parser->incrementExpensiveFunctionCount()) {
+                    $file = RepoGroup::singleton()->findFile($title);
+                    if ($file) {
+                        $parser->getOutput()->addImage(
+                            $file->getName(),
+                            $file->getTimestamp(),
+                            $file->getSha1()
+                        );
+
+                        return $file->exists();
+                    }
+                }
+
+                return false;
+            case NS_SPECIAL:
+                return SpecialPageFactory::exists($title->getDBkey());
+            default:
+                if (!$title->isExternal()) {
+                    $pdbk = $title->getPrefixedDBkey();
+                    $linkCache = MediaWikiServices::getInstance()->getLinkCache();
+                    if (
+                        $linkCache->getGoodLinkID($pdbk) !== 0 ||
+                        (!$linkCache->isBadLink($pdbk) &&
+                            $parser->incrementExpensiveFunctionCount() &&
+                            $title->getArticleID() != 0)
+                    ) {
+                        return true;
+                    }
+                }
+
+                return false;
+        }
     }
 
     /**
@@ -684,6 +799,40 @@ class Riven
         return $node instanceof PPNode_Hash_Text && substr($node->value, 0, 2) === '[[';
     }
 
+    /**
+     * Indicates whether the node provided can be trimmed out of the table if the content is empty.
+     *
+     * @param PPNode|null $node The node to check.
+     *
+     * @return bool
+     *
+     */
+    private static function isTrimmable(PPNode $node = null)
+    {
+        // Is it a template?
+        if ($node instanceof PPTemplateFrame_Hash) {
+            return true;
+        }
+
+        if ($node instanceof PPNode_Hash_Text) {
+            // Is it a link?
+            if (substr($node->value, 0, 2) == '[[') {
+                return true;
+            }
+
+            // Is it something that looks like an HTML tag?
+            return preg_match('#\A\s*' . self::TAG_REGEX  . '#s', $node->value);
+        }
+    }
+
+    /**
+     * Converts a cell map back to an HTML table.
+     *
+     * @param mixed $map The cell map provided by buildMap().
+     *
+     * @return string The HTML text for the table.
+     *
+     */
     private static function mapToTable($map)
     {
         $output = '';
@@ -705,6 +854,18 @@ class Riven
         return $output;
     }
 
+    /**
+     * Recursively searches for tables within the tags and cleans them.
+     *
+     * @param Parser $parser The parser in use.
+     * @param mixed $input The table to work on.
+     * @param mixed $offset Where in the table we're looking at. This is used in cleaning nested tables.
+     * @param mixed $protectRows The number of rows at the top of the table that should not be removed, no matter what.
+     * @param null $open The table tag that was found during recursion. This can be null for the outermost table.
+     *
+     * @return string The cleaned results.
+     *
+     */
     private static function parseTable(Parser $parser, $input, &$offset, $protectRows, $open = null)
     {
         // show("Parse Table In:\n", substr($input, $offset));
@@ -754,8 +915,9 @@ class Riven
         $named = [];
         $unnamed = [];
         if (!is_null($args)) {
-            foreach ($args as $arg) {
-                list($name, $value) = ParserHelper::getKeyValue($frame, $arg);
+            $unnamed[] = $args[0];
+            for ($i = 1; $i < count($args); $i++) {
+                list($name, $value) = ParserHelper::getKeyValue($frame, $args[$i]);
                 if (is_null($name)) {
                     $unnamed[] = $value;
                 } else {

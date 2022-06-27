@@ -28,7 +28,11 @@
 		"ParserGetVariableValueSwitch": "RivenHooks::onParserGetVariableValueSwitch"
 	},
 	"TrackingCategories": [
-		"riven-pickfromquotes-category"
+		"riven-tracking-arg",
+		"riven-tracking-explodeargs",
+		"riven-tracking-pickfrom",
+		"riven-tracking-rand",
+		"riven-tracking-skinname"
 	],
 	"manifest_version": 1
 }
