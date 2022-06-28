@@ -16,6 +16,7 @@ class Riven
 {
     const AV_ORIGINAL  = 'riven-original';
     const AV_RECURSIVE = 'riven-recursive';
+    const AV_SMART     = 'riven-smart';
     const AV_TOP       = 'riven-top';
 
     const NA_EXPLODE   = 'riven-explode';
@@ -36,7 +37,7 @@ class Riven
     const TG_CLEANSPACE = 'riven-cleanspace';
     const TG_CLEANTABLE = 'riven-cleantable';
 
-    const TRACKING_ARGS        = 'riven-tracking-args';
+    const TRACKING_ARG        = 'riven-tracking-arg';
     const TRACKING_EXPLODEARGS = 'riven-tracking-explodeargs';
     const TRACKING_PICKFROM    = 'riven-tracking-pickfrom';
     const TRACKING_RAND        = 'riven-tracking-rand';
@@ -59,7 +60,7 @@ class Riven
      */
     public static function doArg(Parser $parser, PPFrame $frame, array $args)
     {
-        $parser->addTrackingCategory(self::TRACKING_ARGS);
+        $parser->addTrackingCategory(self::TRACKING_ARG);
         $parser->getOutput()->updateCacheExpiry(0);
         $arg = $frame->expand($args[0]);
         $default = isset($args[1]) ? $frame->expand($args[1]) : '';
@@ -181,6 +182,18 @@ class Riven
         return ParserHelper::formatTagForDebug($output, $debug);
     }
 
+    /**
+     * Finds the first page the list of parameters that exists.
+     *
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param array $args Function arguments:
+     *       1-n: All unnamed parameters are page names to search.
+     *        if: A condition that must be true in order for this function to run.
+     *     ifnot: A condition that must be false in order for this function to run.
+     * @return [type]
+     *
+     */
     public static function doFindFirst(Parser $parser, PPFrame $frame, array $args)
     {
         // This is currently just a loop over the core of #ifexistsx. It may benefit from using a database query
@@ -422,51 +435,13 @@ class Riven
         }
 
         list($named, $values) = self::splitNamedArgs($frame, $values);
-        $named = array_merge($named, $dupes);
-        foreach ($values as $key => $value) {
-            // show('After: ', $key, '=', $value);
+        $named = array_merge($named, $dupes); // Merge in any duplicates now that we've filtered out the ones we want.
+
+        if (!isset($values[1])) {
+            return '';
         }
 
-        if (isset($values[1])) {
-            // Figure out what we're dealing with and populate appropriately.
-            $nargs = $frame->expand($values[1]);
-            if (!is_numeric($nargs) && count($values) > 3) {
-                // Old #explodeargs; can be deleted once all are converted.
-                // TODO: check! Logic seems wrong. Probably needs an array_shift.
-                // $templateValues = ParserHelper::expandArray($frame, $values);
-                $separator = $nargs;
-                $templateName = $frame->expand($values[2]);
-                $nargs = $frame->expand($values[3]);
-                $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
-                $values = explode($separator, $frame->expand($values[0]));
-            } else {
-                $templateName = $frame->expand($values[0]);
-                $explode = isset($magicArgs[self::NA_EXPLODE]) ? $magicArgs[self::NA_EXPLODE] : '';
-                $explode = $frame->expand($explode);
-                if (strlen($explode)) {
-                    $separator = ParserHelper::arrayGet($magicArgs, self::NA_SEPARATOR, ',');
-                    $explode = $frame->expand($magicArgs[self::NA_EXPLODE]);
-                    $values = explode($separator, $explode);
-                } else {
-                    $values = array_slice($values, 2);
-                    if (!count($values)) {
-                        $untrimmed = $frame->getNumberedArguments();
-                        $values = [];
-                        foreach ($untrimmed as $value) {
-                            $values[] = trim($value);
-                        }
-
-                        foreach ($frame->getNamedArguments() as $key => $value) {
-                            $numKey = intval($key);
-                            if ($numKey > 0) {
-                                $values[$numKey] = trim($value);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
+        list($templateName, $nargs) = self::harmonizeSplitArgs($parser, $frame, $magicArgs, $values);
         $nargs = intval($nargs);
         if (!$nargs) {
             $nargs = count($values);
@@ -517,16 +492,32 @@ class Riven
             return '';
         }
 
-        /* Test this against the simplicity of:
+        list($magicArgs, $values, $dupes) = ParserHelper::getMagicArgs(
+            $frame,
+            $args,
+            self::NA_MODE
+        );
+
+        $mode = ParserHelper::getArgumentValue(self::NA_MODE, $magicArgs);
+        $modeWord = ParserHelper::findMagicID($mode);
+
+        if ($modeWord === self::AV_SMART) {
+            // This was a lot simpler in the original implementation, working strictly by recursively parsing the root
+            // node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
+            // necessitating this mess...which is still better than trying to create a new node structure.
+            $preprocessor = new Preprocessor_Hash($parser);
+            $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
+            $rootNode = $preprocessor->preprocessToObj($args[0], $flag);
+            $output = self::trimLinksParseNode($parser, $frame, $rootNode);
+            $output = $parser->mStripState->unstripBoth($output);
+            $output = $parser->replaceLinkHoldersText($output);
+            $newNode = $preprocessor->preprocessToObj($output, $flag);
+            $output = $frame->expand($newNode);
+            return [$output, 'noparse' => 'true'];
+        } else {
             $output = $parser->recursiveTagParse($args[0]);
             return $parser->replaceLinkHoldersText($output);
-        */
-
-        $preprocessor = new Preprocessor_Hash($parser);
-        $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
-        $rootNode = $preprocessor->preprocessToObj($args[0], $flag);
-        self::trimLinksParseNode($parser, $rootNode);
-        return $frame->expand($rootNode);
+        }
     }
 
     public static function init()
@@ -786,6 +777,49 @@ class Riven
         }
     }
 
+    private static function harmonizeSplitArgs(Parser $parser, PPFrame $frame, array $magicArgs, array $values)
+    {
+        // Figure out what we're dealing with and populate appropriately.
+        $nargs = $frame->expand($values[1]);
+        if (!is_numeric($nargs) && count($values) > 3) {
+            // Old #explodeargs; can be deleted once all are converted.
+            // TODO: check! Logic seems wrong. Probably needs an array_shift.
+            // $templateValues = ParserHelper::expandArray($frame, $values);
+            $separator = $nargs;
+            $templateName = $frame->expand($values[2]);
+            $nargs = $frame->expand($values[3]);
+            $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
+            $values = explode($separator, $frame->expand($values[0]));
+        } else {
+            $templateName = $frame->expand($values[0]);
+            $explode = isset($magicArgs[self::NA_EXPLODE]) ? $magicArgs[self::NA_EXPLODE] : '';
+            $explode = $frame->expand($explode);
+            if (strlen($explode)) {
+                $separator = ParserHelper::arrayGet($magicArgs, self::NA_SEPARATOR, ',');
+                $explode = $frame->expand($magicArgs[self::NA_EXPLODE]);
+                $values = explode($separator, $explode);
+            } else {
+                $values = array_slice($values, 2);
+                if (!count($values)) {
+                    $untrimmed = $frame->getNumberedArguments();
+                    $values = [];
+                    foreach ($untrimmed as $value) {
+                        $values[] = trim($value);
+                    }
+
+                    foreach ($frame->getNamedArguments() as $key => $value) {
+                        $numKey = intval($key);
+                        if ($numKey > 0) {
+                            $values[$numKey] = trim($value);
+                        }
+                    }
+                }
+            }
+        }
+
+        return [$templateName, $nargs];
+    }
+
     /**
      * Determines of the node provided is a link.
      *
@@ -937,47 +971,52 @@ class Riven
      *
      * @return void
      */
-    private static function trimLinksParseNode(Parser $parser, PPNode $node)
+    private static function trimLinksParseNode(Parser $parser, PPFrame $frame, PPNode $node)
     {
-        if ($node instanceof PPNode_Hash_Text && $node == '[[') {
-            $content = $node->getNextSibling();
-            if ($content instanceof PPNode_Hash_Text) {
-                $contentText = (string)$content;
-                $close = strpos($contentText, ']]'); // Should always be the end of the content text.
-                if ($close == strlen($contentText) - 2) {
-                    $link = substr($contentText, 0, $close);
-                    $split = explode('|', $link, 2);
-                    $titleText = trim($split[0]);
-                    $leadingColon = $titleText[0] == ':';
-                    $title = Title::newFromText($titleText);
-                    $ns = $title ? $title->getNamespace() : 0;
-                    if ($leadingColon) {
-                        $titleText = substr($titleText, 1);
-                        if ($ns === NS_MEDIA) {
-                            $leadingColon = false;
-                        }
-                    }
-
-                    if ($leadingColon || !in_array($ns, [NS_CATEGORY, NS_FILE, NS_MEDIA, NS_SPECIAL])) {
-                        $node->value = '';
-                        $content->value = substr($contentText, $close + 2);
-                        if (isset($split[1])) {
-                            // If display text was provided, preserve formatting but put nowiki pairs at each end to break any accidental formatting that results.
-                            $node->value = $parser->insertStripItem('<nowiki/>') . $split[1] . $parser->insertStripItem('<nowiki/>');
-                        } else {
-                            // For title-only links, formatting should not be applied at all, so just surround the entire thing with nowiki tags.
-                            $text = $title ? $title->getPrefixedText() : $titleText;
-                            $node->value = $parser->insertStripItem("<nowiki>$text</nowiki>");
-                        }
-                    }
+        if (self::isLink($node)) {
+            // show($node->value);
+            $close = strpos($node->value, ']]');
+            $link = substr($node->value, 2, $close - 2);
+            $split = explode('|', $link, 2);
+            $titleText = trim($split[0]);
+            $leadingColon = $titleText[0] === ':';
+            $title = Title::newFromText($titleText);
+            $ns = $title ? $title->getNamespace() : 0;
+            if ($leadingColon) {
+                $titleText = substr($titleText, 1);
+                if ($ns === NS_MEDIA) {
+                    $leadingColon = false;
                 }
             }
+
+            if ($leadingColon || !in_array($ns, [NS_CATEGORY, NS_FILE, NS_MEDIA, NS_SPECIAL])) {
+                $after = substr($node->value, $close + 2);
+                if (isset($split[1])) {
+                    // If display text was provided, preserve formatting but put self-closed nowikis at each end to break any accidental formatting that results.
+                    return "<nowiki/>{$split[1]}<nowiki/>$after";
+                } else {
+                    // For title-only links, formatting should not be applied at all, so just surround the entire thing with nowiki tags.
+                    $text = $title ? $title->getPrefixedText() : $titleText;
+                    return "<nowiki/>$text<nowiki/>$after";
+                }
+            }
+
+            return $frame->expand($node);
         } elseif ($node instanceof PPNode_Hash_Tree) {
             $child = $node->getFirstChild();
+            $output = '';
             while ($child) {
-                self::trimLinksParseNode($parser, $child);
+                $output .= self::trimLinksParseNode($parser, $frame, $child);
                 $child = $child->getNextSibling();
             }
+
+            return $output;
+        } elseif ($node instanceof PPNode_Hash_Text) {
+            return $node->value;
+        } elseif ($node instanceof PPNode_Hash_Attr) {
+            return $frame->expand($node);
+        } else {
+            return $frame->expand($node);
         }
     }
 }
