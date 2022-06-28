@@ -6,6 +6,7 @@ $magicWords['en'] = [
 	Riven::AV_SMART => [0, 'smart'],
 	Riven::AV_TOP => [0, 'top'],
 
+	Riven::NA_DELIMITER => [0, 'delimiter'],
 	Riven::NA_EXPLODE => [0, 'explode'],
 	Riven::NA_MODE => [0, 'mode'],
 	Riven::NA_PROTROWS => [0, 'protectrows'],

@@ -2,14 +2,14 @@
     "@metadata": {
         "authors": []
     },
-    "riven-tracking-arg": "Pages using arg",
+    "riven-tracking-arg": "Riven-Pages using arg",
     "riven-tracking-arg-desc": "(Tracking Only) The page uses the {{#arg}} function.",
-    "riven-tracking-explodeargs": "Pages using explodeargs",
+    "riven-tracking-explodeargs": "Riven-Pages using explodeargs",
     "riven-tracking-explodeargs-desc": "The page uses the old {{#explodeargs}} function; it should be converted to use {{#splitargs}}.",
-    "riven-tracking-pickfrom": "Pages using pickfrom",
+    "riven-tracking-pickfrom": "Riven-Pages using pickfrom",
     "riven-tracking-pickfrom-desc": "(Tracking Only) The page uses the {{#pickfrom}} function.",
-    "riven-tracking-rand": "Pages using rand",
+    "riven-tracking-rand": "Riven-Pages using rand",
     "riven-tracking-rand-desc": "(Tracking Only) The page uses the {{#rand}} function.",
-    "riven-tracking-skinname": "Pages using trimlinks",
+    "riven-tracking-skinname": "Riven-Pages using trimlinks",
     "riven-tracking-skinname-desc": "(Tracking Only) The page uses the {{SKINNAME}} variable."
 }

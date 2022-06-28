@@ -19,6 +19,7 @@ class Riven
     const AV_SMART     = 'riven-smart';
     const AV_TOP       = 'riven-top';
 
+    const NA_DELIMITER = 'riven-delimiter';
     const NA_EXPLODE   = 'riven-explode';
     const NA_MODE      = 'riven-mode';
     const NA_PROTROWS  = 'riven-protectrows';
@@ -37,7 +38,7 @@ class Riven
     const TG_CLEANSPACE = 'riven-cleanspace';
     const TG_CLEANTABLE = 'riven-cleantable';
 
-    const TRACKING_ARG        = 'riven-tracking-arg';
+    const TRACKING_ARG        = 'riven-tracking-args';
     const TRACKING_EXPLODEARGS = 'riven-tracking-explodeargs';
     const TRACKING_PICKFROM    = 'riven-tracking-pickfrom';
     const TRACKING_RAND        = 'riven-tracking-rand';
@@ -106,7 +107,7 @@ class Riven
                 $output = self::cleanSpacePP($output, $parser, $frame, true);
                 break; */
             case self::AV_TOP:
-                $output = self::cleanSpacePP($output, $parser, $frame);
+                $output = self::cleanSpacePP($parser, $frame, $output);
                 break;
             default:
                 $output = self::cleanSpaceOriginal($output);
@@ -407,14 +408,12 @@ class Riven
         return RequestContext::getMain()->getSkin()->getSkinName();
     }
 
-    // IMP: Adds nowiki option to view actual template calls for debugging. Only works in preview mode by default; set to 'always' to have it display that way when saved.
-    // IMP: All anonymous and named arguments in the list are added to each call.
     /**
-     * doSplitArgs
+     * Repetitively calls a template with different parameters for each call.
      *
-     * @param Parser $parser
-     * @param PPFrame $frame
-     * @param array $args
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param array $args Function arguments:
      *
      * @return string
      */
@@ -426,6 +425,7 @@ class Riven
             ParserHelper::NA_DEBUG,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT,
+            self::NA_DELIMITER,
             self::NA_EXPLODE,
             self::NA_SEPARATOR
         );
@@ -436,12 +436,11 @@ class Riven
 
         list($named, $values) = self::splitNamedArgs($frame, $values);
         $named = array_merge($named, $dupes); // Merge in any duplicates now that we've filtered out the ones we want.
-
         if (!isset($values[1])) {
             return '';
         }
 
-        list($templateName, $nargs) = self::harmonizeSplitArgs($parser, $frame, $magicArgs, $values);
+        list($templateName, $nargs, $values) = self::harmonizeSplitArgs($parser, $frame, $magicArgs, $values);
         $nargs = intval($nargs);
         if (!$nargs) {
             $nargs = count($values);
@@ -451,10 +450,18 @@ class Riven
             return '';
         }
 
+        $separator = ParserHelper::arrayGet($magicArgs, self::NA_SEPARATOR);
         $output = '';
         for ($index = 0; $index < count($values); $index += $nargs) {
+            if ($index > 0) {
+                $output .= $separator;
+            }
             $output .= '{{' . $templateName;
             for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
+                if (!is_array($values)) {
+                    // show($output);
+                    $values = [$values];
+                }
                 $value = ParserHelper::arrayGet($values, $index + $paramNum);
                 if (!is_null($value)) {
                     $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
@@ -476,13 +483,14 @@ class Riven
         return ParserHelper::formatPFForDebug($output, $parser, $magicArgs);
     }
 
-    // IMP: Ignores Category and Image links unless they're forced links; better parsing of edge cases (nested links, nowiki, etc.).
     /**
-     * doTrimLinks
+     * Trims links from a block of text.
      *
-     * @param Parser $parser
-     * @param PPFrame $frame
-     * @param array $args
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param array $args Function arguments:
+     *     mode: The only option currently is "smart", which uses the preprocessor to parse the code with near-perfect
+     *           results.
      *
      * @return string
      */
@@ -498,10 +506,7 @@ class Riven
             self::NA_MODE
         );
 
-        $mode = ParserHelper::getArgumentValue(self::NA_MODE, $magicArgs);
-        $modeWord = ParserHelper::findMagicID($mode);
-
-        if ($modeWord === self::AV_SMART) {
+        if (ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
             // This was a lot simpler in the original implementation, working strictly by recursively parsing the root
             // node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
             // necessitating this mess...which is still better than trying to create a new node structure.
@@ -523,9 +528,7 @@ class Riven
     public static function init()
     {
         ParserHelper::cacheMagicWords([
-            self::AV_ORIGINAL,
-            self::AV_RECURSIVE,
-            self::AV_TOP,
+            self::NA_DELIMITER,
             self::NA_EXPLODE,
             self::NA_MODE,
             self::NA_PROTROWS,
@@ -639,7 +642,7 @@ class Riven
      * @param PPNode $node The pre-processor node to clean.
      * @param mixed $recurse Whether to recurse into the node.
      *
-     * @return void
+     * @return string The wiki text after cleaning it.
      *
      */
     private static function cleanSpaceNode(PPFrame $frame, PPNode $node)
@@ -710,15 +713,16 @@ class Riven
     /**
      * Cleans the text using the pre-processor.
      *
-     * @param mixed $text
-     * @param Parser $parser
-     * @param PPFrame $frame
-     * @param mixed $recurse
+     * @param mixed $text The text to clean.
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param mixed $recurse Whether to recurse into other templates and links. (Removed from code for now, but may be
+     *                       re-implemented later.)
      *
      * @return [type]
      *
      */
-    private static function cleanSpacePP($text, Parser $parser, PPFrame $frame)
+    private static function cleanSpacePP(Parser $parser, PPFrame $frame, $text)
     {
         $rootNode = $parser->getPreprocessor()->preprocessToObj($text);
         return self::cleanSpaceNode($frame, $rootNode);
@@ -777,32 +781,40 @@ class Riven
         }
     }
 
+    /**
+     * Takes the input from the various forms of #splitargs and returns it as a cohesive set of variables.
+     *
+     * @param Parser $parser
+     * @param PPFrame $frame
+     * @param array $magicArgs
+     * @param array $values
+     *
+     * @return [type]
+     *
+     */
     private static function harmonizeSplitArgs(Parser $parser, PPFrame $frame, array $magicArgs, array $values)
     {
         // Figure out what we're dealing with and populate appropriately.
         $nargs = $frame->expand($values[1]);
         if (!is_numeric($nargs) && count($values) > 3) {
             // Old #explodeargs; can be deleted once all are converted.
-            // TODO: check! Logic seems wrong. Probably needs an array_shift.
-            // $templateValues = ParserHelper::expandArray($frame, $values);
-            $separator = $nargs;
+            $delimiter = $nargs;
             $templateName = $frame->expand($values[2]);
             $nargs = $frame->expand($values[3]);
             $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
-            $values = explode($separator, $frame->expand($values[0]));
+            $values = explode($delimiter, $frame->expand($values[0]));
         } else {
             $templateName = $frame->expand($values[0]);
-            $explode = isset($magicArgs[self::NA_EXPLODE]) ? $magicArgs[self::NA_EXPLODE] : '';
-            $explode = $frame->expand($explode);
-            if (strlen($explode)) {
-                $separator = ParserHelper::arrayGet($magicArgs, self::NA_SEPARATOR, ',');
+            if (isset($magicArgs[self::NA_EXPLODE])) {
+                $delimiter = ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',');
                 $explode = $frame->expand($magicArgs[self::NA_EXPLODE]);
-                $values = explode($separator, $explode);
+                $values = explode($delimiter, $explode);
             } else {
                 $values = array_slice($values, 2);
                 if (!count($values)) {
                     $untrimmed = $frame->getNumberedArguments();
                     $values = [];
+
                     foreach ($untrimmed as $value) {
                         $values[] = trim($value);
                     }
@@ -817,7 +829,7 @@ class Riven
             }
         }
 
-        return [$templateName, $nargs];
+        return [$templateName, $nargs, $values];
     }
 
     /**
@@ -937,10 +949,10 @@ class Riven
     }
 
     /**
-     * splitNamedArgs
+     * Splits named arguments from unnamed.
      *
-     * @param PPFrame $frame
-     * @param array|null $args
+     * @param PPFrame $frame The template frame in use.
+     * @param array|null $args The arguments to split.
      *
      * @return array
      */
@@ -964,12 +976,13 @@ class Riven
     }
 
     /**
-     * trimLinksParseNode
+     * Recursively parses a single PPNode and strips the relevant links from it.
      *
-     * @param Parser $parser
-     * @param PPNode $node
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param PPNode $node The node to work on.
      *
-     * @return void
+     * @return string
      */
     private static function trimLinksParseNode(Parser $parser, PPFrame $frame, PPNode $node)
     {
@@ -989,7 +1002,7 @@ class Riven
                 }
             }
 
-            if ($leadingColon || !in_array($ns, [NS_CATEGORY, NS_FILE, NS_MEDIA, NS_SPECIAL])) {
+            if ($leadingColon || (!$title->isExternal() && !in_array($ns, [NS_CATEGORY, NS_FILE, NS_MEDIA, NS_SPECIAL]))) {
                 $after = substr($node->value, $close + 2);
                 if (isset($split[1])) {
                     // If display text was provided, preserve formatting but put self-closed nowikis at each end to break any accidental formatting that results.
