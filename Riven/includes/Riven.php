@@ -240,16 +240,17 @@ class Riven
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT
         );
+
         if (!ParserHelper::checkIfs($magicArgs)) {
             return '';
         }
 
         $titleText = trim($frame->expand(ParserHelper::arrayGet($values, 0, '')));
-        $result = self::existsCommon($parser, $titleText)
-            ? 1
-            : 2;
+        $result = self::existsCommon($parser, $titleText) ? 1 : 2;
 
-        return trim($frame->expand(ParserHelper::arrayGet($values, $result)));
+        $result = ParserHelper::arrayGet($values, $result);
+
+        return is_null($result) ? '' : trim($frame->expand($result));
     }
 
     /**
