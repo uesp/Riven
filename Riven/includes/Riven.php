@@ -26,14 +26,17 @@ class Riven
     const NA_SEED      = 'riven-seed';
     const NA_SEPARATOR = 'riven-separator';
 
-    const PF_ARG        = 'riven-arg'; // From DynamicFunctions
-    const PF_FINDFIRST  = 'riven-findfirst';
-    const PF_IFEXISTX   = 'riven-ifexistx';
-    const PF_INCLUDE    = 'riven-include';
-    const PF_PICKFROM   = 'riven-pickfrom';
-    const PF_RAND       = 'riven-rand'; // From DynamicFunctions
-    const PF_SPLITARGS  = 'riven-splitargs';
-    const PF_TRIMLINKS  = 'riven-trimlinks';
+    // For whatever reason, MediaWiki did Magic Words differently from everything else, so parser functions are best
+    // off with the "key" being the actual word you intend to use. That's why these ones don't have "riven-" prepended
+    // to them.
+    const PF_ARG        = 'arg'; // From DynamicFunctions
+    const PF_FINDFIRST  = 'findfirst';
+    const PF_IFEXISTX   = 'ifexistx';
+    const PF_INCLUDE    = 'include';
+    const PF_PICKFROM   = 'pickfrom';
+    const PF_RAND       = 'rand'; // From DynamicFunctions
+    const PF_SPLITARGS  = 'splitargs';
+    const PF_TRIMLINKS  = 'trimlinks';
 
     const TG_CLEANSPACE = 'riven-cleanspace';
     const TG_CLEANTABLE = 'riven-cleantable';
@@ -150,14 +153,13 @@ class Riven
     public static function doCleanTable($text, $args, Parser $parser, PPFrame $frame)
     {
         $input = $parser->recursiveTagParse($text, $frame);
-        $isPreview = $parser->getOptions()->getIsPreview();
 
         // This ensures that tables are not cleaned if being displayed directly on the Template page.
         // Previewing will process cleantable normally.
         if (
-            $parser->getTitle()->getNamespace() == NS_TEMPLATE &&
             $frame->depth == 0 &&
-            $isPreview
+            $parser->getTitle()->getNamespace() == NS_TEMPLATE &&
+            !$parser->getOptions()->getIsPreview()
         ) {
             return $input;
         }
