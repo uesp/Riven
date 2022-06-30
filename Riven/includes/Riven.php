@@ -24,7 +24,6 @@ class Riven
     const NA_MODE      = 'riven-mode';
     const NA_PROTROWS  = 'riven-protectrows';
     const NA_SEED      = 'riven-seed';
-    const NA_SEPARATOR = 'riven-separator';
 
     // For whatever reason, MediaWiki did Magic Words differently from everything else, so parser functions are best
     // off with the "key" being the actual word you intend to use. That's why these ones don't have "riven-" prepended
@@ -94,10 +93,8 @@ class Riven
      */
     public static function doCleanSpace($text, array $args, Parser $parser, PPFrame $frame)
     {
-        $mode = ParserHelper::getArgumentValue(self::NA_MODE, $args);
-        // show('Mode: ', $mode);
-        $modeWord = ParserHelper::findMagicID($mode, self::AV_ORIGINAL);
-        // show('ModeWord: ', $modeWord);
+        $magicArgs = ParserHelper::transformArgs($args);
+        $modeWord = ParserHelper::arrayGet($magicArgs, self::NA_MODE, self::AV_ORIGINAL);
         $output = $text;
         if ($modeWord !== self::AV_ORIGINAL) {
             $output = preg_replace('#<!--.*?-->#s', '', $output);
@@ -152,6 +149,7 @@ class Riven
      */
     public static function doCleanTable($text, $args, Parser $parser, PPFrame $frame)
     {
+        $args = ParserHelper::transformArgs($args);
         $input = $parser->recursiveTagParse($text, $frame);
 
         // This ensures that tables are not cleaned if being displayed directly on the Template page.
@@ -168,7 +166,7 @@ class Riven
         $offset = 0;
         $output = '';
         $lastVal = null;
-        $protectRows = intval(ParserHelper::getArgumentValue(self::NA_PROTROWS, $args, 1));
+        $protectRows = intval(ParserHelper::arrayGet($args, self::NA_PROTROWS, 1));
         do {
             $lastVal = self::parseTable($parser, $input, $offset, $protectRows);
             $output .= $lastVal;
@@ -318,22 +316,15 @@ class Riven
             $args,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT,
-            self::NA_SEED,
-            self::NA_SEPARATOR
+            ParserHelper::NA_SEPARATOR,
+            self::NA_SEED
         );
         $npick = intval(array_shift($values));
         if ($npick <= 0 || count($values) == 0 || !ParserHelper::checkIfs($magicArgs)) {
             return '';
         }
 
-        $separator = $frame->expand(ParserHelper::arrayGet($magicArgs, self::NA_SEPARATOR, "\n"));
-        if (strlen($separator) > 1) {
-            $separator = stripcslashes($separator);
-            $first = $separator[0];
-            if (in_array($first, ['\'', '`', '"']) && $first === substr($separator, -1, 1)) {
-                $separator = substr($separator, 1, -1);
-            }
-        }
+        $separator = ParserHelper::getSeparator($frame, $magicArgs);
 
         if (isset($magicArgs[self::NA_SEED])) {
             // Shuffle uses the basic randomizer, so we seed with srand if requested.
@@ -428,11 +419,12 @@ class Riven
             ParserHelper::NA_DEBUG,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT,
+            ParserHelper::NA_SEPARATOR,
             self::NA_DELIMITER,
-            self::NA_EXPLODE,
-            self::NA_SEPARATOR
+            self::NA_EXPLODE
         );
 
+        show($magicArgs);
         if (!ParserHelper::checkIfs($magicArgs)) {
             return '';
         }
@@ -453,7 +445,7 @@ class Riven
             return '';
         }
 
-        $separator = ParserHelper::arrayGet($magicArgs, self::NA_SEPARATOR);
+        $separator = ParserHelper::getSeparator($frame, $magicArgs);
         $output = '';
         for ($index = 0; $index < count($values); $index += $nargs) {
             if ($index > 0) {
@@ -536,7 +528,6 @@ class Riven
             self::NA_MODE,
             self::NA_PROTROWS,
             self::NA_SEED,
-            self::NA_SEPARATOR,
         ]);
     }
 

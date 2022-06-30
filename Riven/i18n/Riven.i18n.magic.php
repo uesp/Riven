@@ -11,7 +11,6 @@ $magicWords['en'] = [
 	Riven::NA_MODE => [0, 'mode'],
 	Riven::NA_PROTROWS => [0, 'protectrows'],
 	Riven::NA_SEED => [0, 'seed'],
-	Riven::NA_SEPARATOR => [0, 'separator'],
 
 	Riven::PF_ARG => [0, 'arg'],
 	Riven::PF_FINDFIRST => [0, 'findfirst'],
