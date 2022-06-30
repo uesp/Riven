@@ -425,7 +425,6 @@ class Riven
             self::NA_EXPLODE
         );
 
-        show($magicArgs);
         if (!ParserHelper::checkIfs($magicArgs)) {
             return '';
         }
