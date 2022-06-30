@@ -93,8 +93,9 @@ class Riven
      */
     public static function doCleanSpace($text, array $args, Parser $parser, PPFrame $frame)
     {
-        $magicArgs = ParserHelper::transformArgs($args);
-        $modeWord = ParserHelper::arrayGet($magicArgs, self::NA_MODE, self::AV_ORIGINAL);
+        $args = ParserHelper::transformArgs($args);
+        $mode = ParserHelper::arrayGet($args, self::NA_MODE);
+        $modeWord = ParserHelper::findMagicID($mode, self::AV_ORIGINAL);
         $output = $text;
         if ($modeWord !== self::AV_ORIGINAL) {
             $output = preg_replace('#<!--.*?-->#s', '', $output);
@@ -523,6 +524,7 @@ class Riven
     public static function init()
     {
         ParserHelper::cacheMagicWords([
+            self::AV_TOP,
             self::NA_DELIMITER,
             self::NA_EXPLODE,
             self::NA_MODE,
