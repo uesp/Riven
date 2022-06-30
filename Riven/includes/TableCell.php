@@ -26,7 +26,7 @@ class TableCell
                 $this->parent = $cell;
             } else {
                 $this->attribs = trim($cell['attribs']);
-                $this->content = trim($cell['content']);
+                $this->content = $cell['content'];
                 $this->isHeader = $cell['name'] === 'th';
                 preg_match('#\bcolspan\s*=\s*([\'"]?)(?<span>\d+)\1#', $this->attribs, $colspan);
                 if ($colspan) {
