@@ -209,8 +209,9 @@ class Riven
 
         if (ParserHelper::checkIfs($magicArgs)) {
             foreach ($values as $title) {
-                if (self::existsCommon($parser, $title)) {
-                    return $title;
+                $titleText = trim($frame->expand($title));
+                if (self::existsCommon($parser, $titleText)) {
+                    return $titleText;
                 }
             }
         }
