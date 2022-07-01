@@ -10,6 +10,6 @@
     "riven-tracking-pickfrom-desc": "(Tracking Only) The page uses the {{#pickfrom}} function.",
     "riven-tracking-rand": "Riven-Pages using rand",
     "riven-tracking-rand-desc": "(Tracking Only) The page uses the {{#rand}} function.",
-    "riven-tracking-skinname": "Riven-Pages using trimlinks",
+    "riven-tracking-skinname": "Riven-Pages using skinname",
     "riven-tracking-skinname-desc": "(Tracking Only) The page uses the {{SKINNAME}} variable."
 }
