@@ -40,7 +40,7 @@ class Riven
     const TG_CLEANSPACE = 'riven-cleanspace';
     const TG_CLEANTABLE = 'riven-cleantable';
 
-    const TRACKING_ARG        = 'riven-tracking-args';
+    const TRACKING_ARG         = 'riven-tracking-arg';
     const TRACKING_EXPLODEARGS = 'riven-tracking-explodeargs';
     const TRACKING_PICKFROM    = 'riven-tracking-pickfrom';
     const TRACKING_RAND        = 'riven-tracking-rand';
@@ -735,6 +735,10 @@ class Riven
     private static function existsCommon(Parser $parser, $titleText)
     {
         $title = Title::newFromText($titleText);
+        if (!$title) {
+            return;
+        }
+
         $parser->getFunctionLang()->findVariantLink($titleText, $title, true);
         if (!$title) {
             return false;
