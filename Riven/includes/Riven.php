@@ -736,7 +736,7 @@ class Riven
     {
         $title = Title::newFromText($titleText);
         if (!$title) {
-            return;
+            return false;
         }
 
         $parser->getFunctionLang()->findVariantLink($titleText, $title, true);
