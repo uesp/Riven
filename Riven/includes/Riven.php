@@ -34,6 +34,7 @@ class Riven
     const PF_INCLUDE    = 'include';
     const PF_PICKFROM   = 'pickfrom';
     const PF_RAND       = 'rand'; // From DynamicFunctions
+    const PF_SKIN       = 'skin'; // REMOVE ONCE ANY REMAINING USES HAVE BEEN CONVERTED
     const PF_SPLITARGS  = 'splitargs';
     const PF_TRIMLINKS  = 'trimlinks';
 
@@ -392,6 +393,19 @@ class Riven
     }
 
     /**
+     * Temporary addition to track any old #skin calls so they can be converted.
+     *
+     * @param Parser $parser The parser in use.
+     *
+     * @return string The name of the current skin.
+     */
+    public static function doSkin(Parser $parser, PPFrame $frame, array $args)
+    {
+        $parser->addTrackingCategory(self::TRACKING_SKINNAME);
+        return RequestContext::getMain()->getSkin()->getSkinName();
+    }
+
+    /**
      * Gets the user's current skin.
      *
      * @param Parser $parser The parser in use.
@@ -592,6 +606,7 @@ class Riven
         $map = self::buildMap($input);
         // show($map);
         $sectionHasContent = false;
+        $contentRows = 0;
         for ($rowNum = count($map) - 1; $rowNum >= $protectRows; $rowNum--) {
             $row = $map[$rowNum];
             $rowHasContent = false;
@@ -612,19 +627,25 @@ class Riven
             // show('Row: ', $rowNum, "\n", $rowHasContent, "\n", $row);
             $sectionHasContent |= $rowHasContent;
             if ($allHeaders) {
-                if ($sectionHasContent) {
-                    $sectionHasContent = false;
-                } else {
+                if ($contentRows) {
+                    if ($sectionHasContent) {
+                        $sectionHasContent = false;
+                    } else {
+                        unset($map[$rowNum]);
+                        $contentRows = 0;
+                    }
+                }
+            } else {
+                $contentRows++;
+                if (!$rowHasContent) {
+                    /** @var TableCell $cell */
+                    foreach ($spans as $cell) {
+                        $cell->decrementRowspan();
+                        // show('RowCount: ', $cell->getRowspan());
+                    }
+
                     unset($map[$rowNum]);
                 }
-            } elseif (!$rowHasContent) {
-                /** @var TableCell $cell */
-                foreach ($spans as $cell) {
-                    $cell->decrementRowspan();
-                    // show('RowCount: ', $cell->getRowspan());
-                }
-
-                unset($map[$rowNum]);
             }
         }
 
