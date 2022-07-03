@@ -317,6 +317,7 @@ class Riven
         list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
+            ParserHelper::NA_ALLOWEMPTY,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT,
             ParserHelper::NA_SEPARATOR,
@@ -326,8 +327,6 @@ class Riven
         if ($npick <= 0 || count($values) == 0 || !ParserHelper::checkIfs($magicArgs)) {
             return '';
         }
-
-        $separator = ParserHelper::getSeparator($frame, $magicArgs);
 
         if (isset($magicArgs[self::NA_SEED])) {
             // Shuffle uses the basic randomizer, so we seed with srand if requested.
@@ -345,7 +344,7 @@ class Riven
             $retval[] = trim($frame->expand($value));
         }
 
-        return implode($separator, $retval);
+        return ParserHelper::selectiveJoin($frame, $magicArgs, $retval);
     }
 
     /**
@@ -432,6 +431,7 @@ class Riven
         list($magicArgs, $values, $dupes) = ParserHelper::getMagicArgs(
             $frame,
             $args,
+            ParserHelper::NA_ALLOWEMPTY,
             ParserHelper::NA_DEBUG,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT,
@@ -460,36 +460,36 @@ class Riven
             return '';
         }
 
-        $separator = ParserHelper::getSeparator($frame, $magicArgs);
-        $output = '';
+        $templates = [];
         for ($index = 0; $index < count($values); $index += $nargs) {
-            if ($index > 0) {
-                $output .= $separator;
-            }
-            $output .= '{{' . $templateName;
+            $parameters = '';
             for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
                 if (!is_array($values)) {
                     // show($output);
                     $values = [$values];
                 }
+
                 $value = ParserHelper::arrayGet($values, $index + $paramNum);
                 if (!is_null($value)) {
                     $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
                     // We have to use numbered arguments to avoid the possibility that $value is something like
                     // 'param=value', which is possible with the exploding versions, at least.
                     $displayNum = $paramNum + 1;
-                    $output .= "|$displayNum=$value";
+                    $parameters .= "|$displayNum=$value";
                 }
             }
 
             foreach ($named as $name => $value) {
                 $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
-                $output .= "|$name=$value";
+                $parameters .= "|$name=$value";
             }
 
-            $output .= '}}';
+            if (strlen($parameters) > 0) {
+                $templates[] = '{{' . $templateName . $parameters . '}}';
+            }
         }
 
+        $output = ParserHelper::selectiveJoin($frame, $magicArgs, $templates);
         return ParserHelper::formatPFForDebug($output, $parser, $magicArgs);
     }
 
