@@ -1,5 +1,9 @@
 <?php
 
+// While it's good form to do this anyway, this line MUST be here or the entire wiki will come crashing to a halt
+// whenever you try to add new magic words.
+$magicWords = [];
+
 $magicWords['en'] = [
 	'riven-original' => [0, 'original'],
 	'riven-recursive' => [0, 'recursive'],
@@ -19,6 +23,7 @@ $magicWords['en'] = [
 	'include' => [0, 'include'],
 	'pickfrom' => [0, 'pickfrom'],
 	'rand' => [0, 'rand'],
+	'skin' => [0, 'skin'],
 	'splitargs' => [0, 'splitargs'],
 	'trimlinks' => [0, 'trimlinks'],
 

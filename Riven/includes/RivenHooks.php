@@ -69,6 +69,7 @@ class RivenHooks
 	private static function initParserFunctions(Parser $parser)
 	{
 		$parser->setFunctionHook(Riven::PF_ARG, 'Riven::doArg', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(Riven::PF_EXPLODEARGS, 'Riven::doExplodeargs', SFH_OBJECT_ARGS);
 		$parser->setFunctionHook(Riven::PF_FINDFIRST, 'Riven::doFindFirst', SFH_OBJECT_ARGS);
 		$parser->setFunctionHook(Riven::PF_IFEXISTX, 'Riven::doIfExistX', SFH_OBJECT_ARGS);
 		$parser->setFunctionHook(Riven::PF_INCLUDE, 'Riven::doInclude', SFH_OBJECT_ARGS);
