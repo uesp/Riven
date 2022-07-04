@@ -102,7 +102,8 @@ class TableCell
             $attribs = ' ' . $attribs;
         }
 
-        return "<$name$attribs>$this->content</$name>";
+        $content = $this->content;
+        return "<$name$attribs>$content</$name>";
     }
 
     private function updateRowSpan()

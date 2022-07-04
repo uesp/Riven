@@ -661,6 +661,7 @@ class Riven
             $spans = [];
 
             foreach ($row as $cell) {
+                show($cell);
                 if ($cell instanceof TableCell) {
                     $content = preg_replace('#\{\{\{[^\}]*\}\}\}#', '', html_entity_decode($cell->getContent()));
                     $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
@@ -946,6 +947,7 @@ class Riven
         $output = '';
         foreach ($map as $row) {
             $output .= $row['open'] . "\n";
+            /** @var TableCell $cell */
             foreach ($row as $name => $cell) {
                 if ($name !== 'open') {
                     // Conditional is to avoid unwanted blank lines in output.
