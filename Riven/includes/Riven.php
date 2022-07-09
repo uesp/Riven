@@ -35,7 +35,6 @@ class Riven
     const PF_INCLUDE     = 'include';
     const PF_PICKFROM    = 'pickfrom';
     const PF_RAND        = 'rand'; // From DynamicFunctions
-    const PF_SKIN        = 'skin'; // REMOVE ONCE ANY REMAINING USES HAVE BEEN CONVERTED
     const PF_SPLITARGS   = 'splitargs';
     const PF_TRIMLINKS   = 'trimlinks';
 
@@ -117,7 +116,7 @@ class Riven
                 break;
         }
 
-        if (ParserHelper::checkDebugMagic($parser, $args)) {
+        if (ParserHelper::checkDebugMagic($parser, $frame, $args)) {
             return ParserHelper::formatTagForDebug($output, true);
         }
 
@@ -178,7 +177,7 @@ class Riven
         $after = substr($input, $offset);
         $output .= $after;
 
-        $debug = ParserHelper::checkDebugMagic($parser, $args);
+        $debug = ParserHelper::checkDebugMagic($parser, $frame, $args);
         if (strlen($output) > 0 && $debug) {
             $output = $parser->recursiveTagParseFully($output);
         }
@@ -188,41 +187,17 @@ class Riven
 
     public static function doExplodeArgs(Parser $parser, PPFrame $frame, array $args)
     {
-        list($magicArgs, $values, $dupes) = ParserHelper::getMagicArgs(
+        $input = ParserHelper::getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_ALLOWEMPTY,
             ParserHelper::NA_DEBUG,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT,
-            ParserHelper::NA_SEPARATOR,
+            ParserHelper::NA_SEPARATOR
         );
 
-        if (!ParserHelper::checkIfs($magicArgs)) {
-            return '';
-        }
-
-        list($named, $values) = self::splitNamedArgs($frame, $values);
-        $named = array_merge($named, $dupes); // Merge in any duplicates now that we've filtered out the ones we want.
-        if (!isset($values[1])) {
-            return '';
-        }
-
-        $nargs = $frame->expand($values[1]);
-        if (!is_numeric($nargs) && count($values) > 3) {
-            // Old #explodeargs; can be deleted once all are converted.
-            $delimiter = $nargs;
-            $templateName = $frame->expand($values[2]);
-            $nargs = $frame->expand($values[3]);
-            $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
-            $values = explode($delimiter, $frame->expand($values[0]));
-        } else {
-            list($templateName, $nargs, $values) = self::harmonizeSplitArgs($parser, $frame, $magicArgs, $values);
-        }
-
-        $templates = self::getTemplates($frame, $templateName, $nargs, $values, $named);
-        $output = self::selectiveJoin($frame, $magicArgs, $templates);
-        return ParserHelper::formatPFForDebug($output, $parser, $magicArgs);
+        return self::splitArgsCommon($parser, $frame, $input);
     }
 
     /**
@@ -239,8 +214,8 @@ class Riven
      */
     public static function doFindFirst(Parser $parser, PPFrame $frame, array $args)
     {
-        // This is currently just a loop over the core of #ifexistsx. It may benefit from using a database query
-        // or LinkBatch instead.
+        // This is just a loop over the core of #ifexistsx. Timing tests on other methods have so far failed thanks to
+        // the existing cache mechanisms behind title checks.
         list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
@@ -290,9 +265,7 @@ class Riven
 
         $titleText = trim($frame->expand(ParserHelper::arrayGet($values, 0, '')));
         $result = self::existsCommon($parser, $titleText) ? 1 : 2;
-
         $result = ParserHelper::arrayGet($values, $result);
-
         return is_null($result) ? '' : trim($frame->expand($result));
     }
 
@@ -321,19 +294,25 @@ class Riven
             ParserHelper::NA_IFNOT
         );
 
-        if (count($values) > 0 && ParserHelper::checkIfs($magicArgs)) {
-            $output = '';
-            foreach ($values as $pageName) {
-                $pageName = $frame->expand($pageName);
-                $t = Title::newFromText($pageName, NS_TEMPLATE);
-                if ($t && $t->exists()) {
-                    // show('Exists!');
-                    $output .= '{{' . $pageName . '}}';
-                }
-            }
-
-            return ParserHelper::formatPFForDebug($output, $parser, $magicArgs);
+        if (count($values) <= 0 || !ParserHelper::checkIfs($magicArgs)) {
+            return;
         }
+
+        $output = '';
+        foreach ($values as $titleText) {
+            $titleText = trim($frame->expand($titleText));
+            $title = Title::newFromText($titleText, NS_TEMPLATE);
+            if (self::existsCommon($parser, $title)) {
+                // show('Exists!');
+                $outTitle = $title->getNamespace() == NS_TEMPLATE
+                    ? $title->getText()
+                    : $title->getFullText();
+                $output .= '{{' . $outTitle . '}}';
+            }
+        }
+
+        $debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
+        return ParserHelper::formatPFForDebug($output, $debug);
     }
 
     /**
@@ -353,7 +332,6 @@ class Riven
     public static function doPickFrom(Parser $parser, PPFrame $frame, array $args)
     {
         $parser->addTrackingCategory(self::TRACKING_PICKFROM);
-        $parser->getOutput()->updateCacheExpiry(0);
         list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
@@ -363,28 +341,39 @@ class Riven
             ParserHelper::NA_SEPARATOR,
             self::NA_SEED
         );
+
         $npick = intval(array_shift($values));
-        if ($npick <= 0 || count($values) == 0 || !ParserHelper::checkIfs($magicArgs)) {
+        if ($npick <= 0 || !count($values) || !ParserHelper::checkIfs($magicArgs)) {
             return '';
         }
 
+        $values = ParserHelper::expandArray($frame, $values, 0, true);
+        $allowEmpty = $frame->expand(ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, ''));
+        if (!$allowEmpty) {
+            $values = array_values(array_filter($values, function ($value) {
+                return strlen($value);
+            }));
+
+            if (!count($values)) {
+                return '';
+            }
+        }
+
+        $parser->getOutput()->updateCacheExpiry(0);
         if (isset($magicArgs[self::NA_SEED])) {
             // Shuffle uses the basic randomizer, so we seed with srand if requested.
             // As of PHP 7.1.0, shuffle uses the mt randomizer, but srand is then aliased to mt_srand, so no urgent need to change it.
-            srand(($frame->expand($magicArgs[self::NA_SEED])));
+            srand($frame->expand($magicArgs[self::NA_SEED]));
         }
 
         shuffle($values); // randomize list
+
         if ($npick < count($values)) {
-            array_splice($values, $npick); // cut off unwanted items
+            $values = array_splice($values, 0, $npick); // cut off unwanted items
         }
 
-        $retval = [];
-        foreach ($values as $value) {
-            $retval[] = trim($frame->expand($value));
-        }
-
-        return self::selectiveJoin($frame, $magicArgs, $retval);
+        $separator = ParserHelper::getSeparator($frame, $magicArgs);
+        return implode($separator, $values);
     }
 
     /**
@@ -399,8 +388,8 @@ class Riven
      *
      * @return string
      *     No parameters: Random number between 1-6.
-     *     One parameter: Random number between 1-to.
-     *     Both parameters: Random number between from-to.
+     *     One parameter: Random number between 1-{to}.
+     *     Both parameters: Random number between {from}-{to}.
      *
      */
     public static function doRand(Parser $parser, PPFrame $frame, array $args)
@@ -411,37 +400,29 @@ class Riven
             $args,
             self::NA_SEED
         );
-        $values = ParserHelper::expandArray($frame, $values);
+
+        if (count($values) == 1) {
+            $low = 1;
+            $high = trim($frame->expand(ParserHelper::arrayGet($values, 0)));
+        } else {
+            $low = trim($frame->expand(ParserHelper::arrayGet($values, 0)));
+            $high = trim($frame->expand(ParserHelper::arrayGet($values, 1)));
+        }
+
+        $low = strlen($low) ? intval($low) : 1;
+        $high = strlen($high) ? intval($high) : 6;
+        if ($low == $high) {
+            return $low;
+        }
+
         if (isset($magicArgs[self::NA_SEED])) {
             mt_srand(($frame->expand($magicArgs[self::NA_SEED])));
         }
 
-        $low = ParserHelper::arrayGet($values, 0);
-        if (count($values) == 1) {
-            $high = $low;
-            $low = 1;
-        } else {
-            $high = intval(ParserHelper::arrayGet($values, 1, $low));
-        }
-
-        if ($low != $high) {
-            $parser->getOutput()->updateCacheExpiry(0);
-        }
-
-        return ($low > $high) ? mt_rand($high, $low) : mt_rand($low, $high);
-    }
-
-    /**
-     * Temporary addition to track any old #skin calls so they can be converted.
-     *
-     * @param Parser $parser The parser in use.
-     *
-     * @return string The name of the current skin.
-     */
-    public static function doSkin(Parser $parser, PPFrame $frame, array $args)
-    {
-        $parser->addTrackingCategory(self::TRACKING_SKINNAME);
-        return RequestContext::getMain()->getSkin()->getSkinName();
+        $parser->getOutput()->updateCacheExpiry(0);
+        return ($low > $high)
+            ? mt_rand($high, $low)
+            : mt_rand($low, $high);
     }
 
     /**
@@ -468,7 +449,7 @@ class Riven
      */
     public static function doSplitArgs(Parser $parser, PPFrame $frame, array $args)
     {
-        list($magicArgs, $values, $dupes) = ParserHelper::getMagicArgs(
+        $input = ParserHelper::getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_ALLOWEMPTY,
@@ -480,24 +461,10 @@ class Riven
             self::NA_EXPLODE
         );
 
-        if (!ParserHelper::checkIfs($magicArgs)) {
-            return '';
-        }
-
-        list($named, $values) = self::splitNamedArgs($frame, $values);
-        $named = array_merge($named, $dupes); // Merge in any duplicates now that we've filtered out the ones we want.
-        if (!isset($values[1])) {
-            return '';
-        }
-
-        // show($values);
-        list($templateName, $nargs, $values) = self::harmonizeSplitArgs($parser, $frame, $magicArgs, $values);
-        $templates = self::getTemplates($frame, $templateName, $nargs, $values, $named);
-        $output = self::selectiveJoin($frame, $magicArgs, $templates);
-        return ParserHelper::formatPFForDebug($output, $parser, $magicArgs);
+        return self::splitArgsCommon($parser, $frame, $input);
     }
 
-    private static function getTemplates(PPFrame $frame, $templateName, $nargs, array $values, array $named)
+    private static function getTemplates(PPFrame $frame, $templateName, $nargs, array $values, array $named, $allowEmpty)
     {
         $nargs = intval($nargs);
         if (!$nargs) {
@@ -511,29 +478,37 @@ class Riven
         $templates = [];
         for ($index = 0; $index < count($values); $index += $nargs) {
             $parameters = '';
+            $blank = true;
             for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
                 if (!is_array($values)) {
+                    // show('Values: ', $values);
                     // show($output);
                     $values = [$values];
                 }
 
                 $value = ParserHelper::arrayGet($values, $index + $paramNum);
                 if (!is_null($value)) {
-                    $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
-                    // We have to use numbered arguments to avoid the possibility that $value is something like
-                    // 'param=value', which is possible with the exploding versions, at least.
+                    $value = trim($frame->expand($value, PPFrame::RECOVER_ORIG));
+                    if (strlen($value > 0)) {
+                        $blank = false;
+                    }
+
+                    // We have to use numbered arguments to avoid the possibility that $value is (or even looks like)
+                    // 'param=value'.
                     $displayNum = $paramNum + 1;
                     $parameters .= "|$displayNum=$value";
                 }
             }
 
-            foreach ($named as $name => $value) {
-                $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
-                $parameters .= "|$name=$value";
-            }
+            if ($allowEmpty || !$blank) {
+                foreach ($named as $name => $value) {
+                    $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
+                    $parameters .= "|$name=$value";
+                }
 
-            if (strlen($parameters) > 0) {
-                $templates[] = '{{' . $templateName . $parameters . '}}';
+                $template = '{{' . $templateName . $parameters . '}}';
+                // show('Template: ', $template);
+                $templates[] = $template;
             }
         }
 
@@ -557,7 +532,7 @@ class Riven
             return '';
         }
 
-        list($magicArgs, $values, $dupes) = ParserHelper::getMagicArgs(
+        list($magicArgs) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             self::NA_MODE
@@ -575,7 +550,7 @@ class Riven
             $output = $parser->replaceLinkHoldersText($output);
             $newNode = $preprocessor->preprocessToObj($output, $flag);
             $output = $frame->expand($newNode);
-            return [$output, 'noparse' => 'true'];
+            return [$output, 'noparse' => true];
         } else {
             $output = $parser->recursiveTagParse($args[0]);
             return $parser->replaceLinkHoldersText($output);
@@ -661,7 +636,7 @@ class Riven
             $spans = [];
 
             foreach ($row as $cell) {
-                show($cell);
+                // show($cell);
                 if ($cell instanceof TableCell) {
                     $content = preg_replace('#\{\{\{[^\}]*\}\}\}#', '', html_entity_decode($cell->getContent()));
                     $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
@@ -676,7 +651,7 @@ class Riven
             $sectionHasContent |= $rowHasContent;
             if ($allHeaders) {
                 if ($contentRows) {
-                    show($contentRows);
+                    // show($contentRows);
                     if ($sectionHasContent) {
                         $sectionHasContent = false;
                     } else {
@@ -807,8 +782,13 @@ class Riven
      */
     private static function existsCommon(Parser $parser, $titleText)
     {
-        $title = Title::newFromText($titleText);
-        if (!$title) {
+        if ($titleText instanceof Title) {
+            $title = $titleText;
+        } else {
+            $title = Title::newFromText($titleText);
+        }
+
+        if (!$title || $title->isExternal()) {
             return false;
         }
 
@@ -817,40 +797,27 @@ class Riven
             return false;
         }
 
-        switch ($title->getNamespace()) {
-            case NS_MEDIA:
-                if ($parser->incrementExpensiveFunctionCount()) {
-                    $file = RepoGroup::singleton()->findFile($title);
-                    if ($file) {
-                        $parser->getOutput()->addImage(
-                            $file->getName(),
-                            $file->getTimestamp(),
-                            $file->getSha1()
-                        );
-
-                        return $file->exists();
-                    }
-                }
-
-                return false;
-            case NS_SPECIAL:
-                return SpecialPageFactory::exists($title->getDBkey());
-            default:
-                if (!$title->isExternal()) {
-                    $pdbk = $title->getPrefixedDBkey();
-                    $linkCache = MediaWikiServices::getInstance()->getLinkCache();
-                    if (
-                        $linkCache->getGoodLinkID($pdbk) !== 0 ||
-                        (!$linkCache->isBadLink($pdbk) &&
-                            $parser->incrementExpensiveFunctionCount() &&
-                            $title->getArticleID() != 0)
-                    ) {
-                        return true;
-                    }
-                }
-
-                return false;
+        $ns = $title->getNamespace();
+        if ($ns == NS_SPECIAL) {
+            return SpecialPageFactory::exists($title->getDBkey());
+        } elseif ($ns == NS_MEDIA) {
+            // This used to be RepoGroup::singleton()->findFile but that seems likely to be very expensive for litlte
+            // or no benefit in this context, so normlize Media to File and just look for that.
+            $title = File::normalizeTitle($title);
         }
+
+        $pdbk = $title->getPrefixedDBkey();
+        $linkCache = MediaWikiServices::getInstance()->getLinkCache();
+        if (
+            $linkCache->getGoodLinkID($pdbk) !== 0 ||
+            (!$linkCache->isBadLink($pdbk) &&
+                $parser->incrementExpensiveFunctionCount() &&
+                $title->getArticleID() != 0)
+        ) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -864,12 +831,30 @@ class Riven
      * @return [type]
      *
      */
-    private static function harmonizeSplitArgs(Parser $parser, PPFrame $frame, array $magicArgs, array $values)
+    private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $input)
     {
+        list($magicArgs, $values, $dupes) = $input;
+        if (!ParserHelper::checkIfs($magicArgs)) {
+            return '';
+        }
+
+        list($named, $values) = self::splitNamedArgs($frame, $values);
+        $named = array_merge($named, $dupes); // Merge in any duplicates now that we've filtered out the ones we want.
+        if (!isset($values[1])) {
+            return '';
+        }
+
         // Figure out what we're dealing with and populate appropriately.
         $templateName = $frame->expand($values[0]);
         $nargs = $frame->expand($values[1]);
-        if (isset($magicArgs[self::NA_EXPLODE])) {
+        if (!is_numeric($nargs) && count($values) > 3) {
+            // Old #explodeargs; can be deleted once all are converted.
+            $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
+            $delimiter = $nargs;
+            $templateName = $frame->expand($values[2]);
+            $nargs = $frame->expand($values[3]);
+            $values = explode($delimiter, $frame->expand($values[0]));
+        } elseif (isset($magicArgs[self::NA_EXPLODE])) {
             $delimiter = ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',');
             $explode = $frame->expand($magicArgs[self::NA_EXPLODE]);
             $values = explode($delimiter, $explode);
@@ -892,7 +877,15 @@ class Riven
             }
         }
 
-        return [$templateName, $nargs, $values];
+        $allowEmpty = ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY);
+        $allowEmpty = $allowEmpty ? $frame->expand($allowEmpty) : true;
+        $templates = self::getTemplates($frame, $templateName, $nargs, $values, $named, $allowEmpty);
+        // show("Templates:\n", $templates);
+        $separator = ParserHelper::getSeparator($frame, $magicArgs);
+        $output = implode($separator, $templates);
+        // show("Output:\n", $output);
+
+        return ParserHelper::formatPFForDebug($output, ParserHelper::checkDebugMagic($parser, $frame, $magicArgs));
     }
 
     /**
@@ -983,13 +976,7 @@ class Riven
         $before = null;
         while (preg_match('#</?table[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
             $match = $matches[0];
-            if (is_null($before) && is_null($open)) {
-                $before = ($match[1] > $offset)
-                    ? substr($input, $offset, $match[1] - $offset)
-                    : '';
-                $offset = $match[1];
-            }
-
+            show('Match: ', $match);
             $output .= substr($input, $offset, $match[1] - $offset);
             $offset = $match[1] + strlen($match[0]);
             if ($match[0][1] == '/') {
@@ -1007,45 +994,9 @@ class Riven
             $output = $parser->insertStripItem($output);
         }
 
-        // show('Before: ', $before);
-        // show('Output: ', $output);
+        // show("Before:\n", $before);
+        // show("Output:\n", $output);
         return $before . $output;
-    }
-
-    /**
-     * Joins strings conditionally based on allowempty and separator values.
-     *
-     * @param PPFrame $frame The frame in use.
-     * @param array $magicArgs The magic arguments from the function call.
-     * @param array $items	The strings to join.
-     *
-     * @return A concatenation of all strings or all non-empty strings, depending on the parameters.
-     *
-     */
-    private static function selectiveJoin(PPFrame $frame, array $magicArgs, array $items)
-    {
-        $output = '';
-        $separator = ParserHelper::getSeparator($frame, $magicArgs);
-        $allowEmpty = ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY);
-        if ($allowEmpty) {
-            $allowEmpty = $frame->expand($allowEmpty);
-        }
-
-        $first = true;
-
-        foreach ($items as $item) {
-            if ($allowEmpty || strlen($item) > 0) {
-                if ($first) {
-                    $first = false;
-                } else {
-                    $output .= $separator;
-                }
-
-                $output .= $item;
-            }
-        }
-
-        return $output;
     }
 
     /**
@@ -1060,7 +1011,7 @@ class Riven
     {
         $named = [];
         $unnamed = [];
-        if ($args) {
+        if (!is_null($args)) {
             $unnamed[] = $args[0];
             for ($i = 1; $i < count($args); $i++) {
                 list($name, $value) = ParserHelper::getKeyValue($frame, $args[$i]);
