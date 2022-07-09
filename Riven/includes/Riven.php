@@ -363,7 +363,7 @@ class Riven
 
         // Shuffle uses the basic randomizer, so we seed with srand if requested.
         // As of PHP 7.1.0, shuffle uses the mt randomizer, but srand is then aliased to mt_srand, so no urgent need to change it.
-        if (isset($magic[self::NA_SEED])) {
+        if (isset($magicArgs[self::NA_SEED])) {
             srand($magicArgs[self::NA_SEED]);
         }
 
@@ -976,7 +976,6 @@ class Riven
         $before = null;
         while (preg_match('#</?table[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
             $match = $matches[0];
-            show('Match: ', $match);
             $output .= substr($input, $offset, $match[1] - $offset);
             $offset = $match[1] + strlen($match[0]);
             if ($match[0][1] == '/') {
