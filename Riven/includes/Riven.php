@@ -348,7 +348,7 @@ class Riven
         }
 
         $values = ParserHelper::expandArray($frame, $values, 0, true);
-        $allowEmpty = $frame->expand(ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, ''));
+        $allowEmpty = ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, '');
         if (!$allowEmpty) {
             $values = array_values(array_filter($values, function ($value) {
                 return strlen($value);
@@ -360,10 +360,11 @@ class Riven
         }
 
         $parser->getOutput()->updateCacheExpiry(0);
-        if (isset($magicArgs[self::NA_SEED])) {
-            // Shuffle uses the basic randomizer, so we seed with srand if requested.
-            // As of PHP 7.1.0, shuffle uses the mt randomizer, but srand is then aliased to mt_srand, so no urgent need to change it.
-            srand($frame->expand($magicArgs[self::NA_SEED]));
+
+        // Shuffle uses the basic randomizer, so we seed with srand if requested.
+        // As of PHP 7.1.0, shuffle uses the mt randomizer, but srand is then aliased to mt_srand, so no urgent need to change it.
+        if (isset($magic[self::NA_SEED])) {
+            srand($magicArgs[self::NA_SEED]);
         }
 
         shuffle($values); // randomize list
@@ -416,7 +417,7 @@ class Riven
         }
 
         if (isset($magicArgs[self::NA_SEED])) {
-            mt_srand(($frame->expand($magicArgs[self::NA_SEED])));
+            mt_srand(($magicArgs[self::NA_SEED]));
         }
 
         $parser->getOutput()->updateCacheExpiry(0);
@@ -856,7 +857,7 @@ class Riven
             $values = explode($delimiter, $frame->expand($values[0]));
         } elseif (isset($magicArgs[self::NA_EXPLODE])) {
             $delimiter = ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',');
-            $explode = $frame->expand($magicArgs[self::NA_EXPLODE]);
+            $explode = $magicArgs[self::NA_EXPLODE];
             $values = explode($delimiter, $explode);
         } else {
             $values = array_slice($values, 2);
@@ -877,8 +878,7 @@ class Riven
             }
         }
 
-        $allowEmpty = ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY);
-        $allowEmpty = $allowEmpty ? $frame->expand($allowEmpty) : true;
+        $allowEmpty = ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, true);
         $templates = self::getTemplates($frame, $templateName, $nargs, $values, $named, $allowEmpty);
         // show("Templates:\n", $templates);
         $separator = ParserHelper::getSeparator($frame, $magicArgs);
