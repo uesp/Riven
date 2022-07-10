@@ -362,9 +362,15 @@ class Riven
         $parser->getOutput()->updateCacheExpiry(0);
 
         // Shuffle uses the basic randomizer, so we seed with srand if requested.
-        // As of PHP 7.1.0, shuffle uses the mt randomizer, but srand is then aliased to mt_srand, so no urgent need to change it.
-        if (isset($magicArgs[self::NA_SEED])) {
-            srand($magicArgs[self::NA_SEED]);
+        // As of PHP 7.1.0, shuffle uses the mt randomizer, but srand is then aliased to mt_srand, so no urgent need to
+        // change it.
+        $seed = ParserHelper::arrayGet($magicArgs, self::NA_SEED);
+        if (is_null($seed)) {
+            // We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based
+            // seed will cause all subsequent calls to srand to only generate hourly results).
+            srand();
+        } else {
+            srand($seed);
         }
 
         shuffle($values); // randomize list
