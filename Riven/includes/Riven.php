@@ -424,6 +424,8 @@ class Riven
 
         if (isset($magicArgs[self::NA_SEED])) {
             mt_srand(($magicArgs[self::NA_SEED]));
+        } else {
+            mt_srand();
         }
 
         $parser->getOutput()->updateCacheExpiry(0);
