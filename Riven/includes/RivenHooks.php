@@ -2,34 +2,42 @@
 
 use MediaWiki\MediaWikiServices;
 
+/* To disable tags, comment out lines in $tagInfo.
+ * To disable variables, comment out lines in onMagicWordwgVariableIDs.
+ * To disable parser functions, comment out lines in initParserFunctions.
+ */
+
+/**
+ * MediaWiki hooks for Riven.
+ */
 class RivenHooks
 {
+	/** Tag hooks. To disable a tag, comment the line out. */
 	private static $tagInfo = [
-		Riven::TG_CLEANSPACE => 'Riven::doCleanSpace',
-		Riven::TG_CLEANTABLE => 'Riven::doCleanTable'
+		#Riven::TG_CLEANSPACE => 'Riven::doCleanSpace',
+		#Riven::TG_CLEANTABLE => 'Riven::doCleanTable'
 	];
 
-	// This is the best place to disable individual magic words;
-	// To disable all magic words, disable the hook that calls this function
 	/**
-	 * onMagicWordwgVariableIDs
+	 * Register variables.
 	 *
-	 * @param array $aCustomVariableIds
+	 * @param array $aCustomVariableIds The current list of variables.
 	 *
 	 * @return void
+	 *
 	 */
 	public static function onMagicWordwgVariableIDs(array &$aCustomVariableIds)
 	{
 		$aCustomVariableIds[] = Riven::VR_SKINNAME;
 	}
 
-	// Register any render callbacks with the parser
 	/**
-	 * onParserFirstCallInit
+	 * Parser initialization.
 	 *
-	 * @param Parser $parser
+	 * @param Parser $parser The parser in use.
 	 *
 	 * @return void
+	 *
 	 */
 	public static function onParserFirstCallInit(Parser $parser)
 	{
@@ -38,16 +46,18 @@ class RivenHooks
 		self::initTagFunctions($parser);
 		Riven::init();
 	}
+
 	/**
-	 * onParserGetVariableValueSwitch
+	 * Get variable values.
 	 *
-	 * @param Parser $parser
-	 * @param array $variableCache
-	 * @param mixed $magicWordId
-	 * @param mixed $ret
-	 * @param PPFrame $frame
+	 * @param Parser $parser The parser in use.
+	 * @param array $variableCache The magic word variable cache.
+	 * @param mixed $magicWordId The magic word id being sought.
+	 * @param mixed $ret Return value.
+	 * @param PPFrame $frame The frame in use.
 	 *
-	 * @return string
+	 * @return bool
+	 *
 	 */
 	public static function onParserGetVariableValueSwitch(Parser $parser, array &$variableCache, $magicWordId, &$ret, PPFrame $frame)
 	{
@@ -55,16 +65,19 @@ class RivenHooks
 			case Riven::VR_SKINNAME:
 				$ret = Riven::doSkinName($parser);
 				$variableCache[$magicWordId] = $ret;
-				break;
+				$parser->getOutput()->updateCacheExpiry(5);
 		}
+
+		return true;
 	}
 
 	/**
-	 * initParserFunctions
+	 * Register all parser functions.
 	 *
-	 * @param Parser $parser
+	 * @param Parser $parser The parser in use.
 	 *
 	 * @return void
+	 *
 	 */
 	private static function initParserFunctions(Parser $parser)
 	{
@@ -80,11 +93,12 @@ class RivenHooks
 	}
 
 	/**
-	 * initTagFunctions
+	 * Register all tag functions.
 	 *
-	 * @param Parser $parser
+	 * @param Parser $parser The parser in use.
 	 *
 	 * @return void
+	 *
 	 */
 	private static function initTagFunctions(Parser $parser)
 	{
