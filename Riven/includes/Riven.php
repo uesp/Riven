@@ -490,15 +490,13 @@ class Riven
             $blank = true;
             for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
                 if (!is_array($values)) {
-                    // show('Values: ', $values);
-                    // show($output);
-                    $values = [$values];
+                    // show('Yes, this is a thing!');
+                    $values = [trim($values)];
                 }
 
                 $value = ParserHelper::arrayGet($values, $index + $paramNum);
                 if (!is_null($value)) {
-                    $value = trim($frame->expand($value, PPFrame::RECOVER_ORIG));
-                    if (strlen($value > 0)) {
+                    if (strlen($value) > 0) {
                         $blank = false;
                     }
 
@@ -847,6 +845,7 @@ class Riven
             return '';
         }
 
+        // show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
         list($named, $values) = self::splitNamedArgs($frame, $values);
         $named = array_merge($named, $dupes); // Merge in any duplicates now that we've filtered out the ones we want.
         if (!isset($values[1])) {
@@ -856,6 +855,10 @@ class Riven
         // Figure out what we're dealing with and populate appropriately.
         $templateName = $frame->expand($values[0]);
         $nargs = $frame->expand($values[1]);
+        if (empty($templateName) || $nargs < 1) {
+            return '';
+        }
+
         if (!is_numeric($nargs) && count($values) > 3) {
             // Old #explodeargs; can be deleted once all are converted.
             $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
@@ -864,30 +867,28 @@ class Riven
             $nargs = $frame->expand($values[3]);
             $values = explode($delimiter, $frame->expand($values[0]));
         } elseif (isset($magicArgs[self::NA_EXPLODE])) {
+            // New explodeargs
             $delimiter = ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',');
             $explode = $magicArgs[self::NA_EXPLODE];
             $values = explode($delimiter, $explode);
         } else {
-            $values = array_slice($values, 2);
-            if (!count($values)) {
-                $untrimmed = $frame->getNumberedArguments();
-                $values = [];
+            $newValues = array_slice($values, 2);
+            if (!count($newValues)) {
+                $newValues = $frame->getNumberedArguments();
+            }
 
-                foreach ($untrimmed as $value) {
-                    $values[] = trim($frame->expand($value));
-                }
-
-                foreach ($frame->getNamedArguments() as $key => $value) {
-                    $numKey = intval($key);
-                    if ($numKey > 0) {
-                        $values[$numKey] = trim($value);
-                    }
-                }
+            $values = [];
+            foreach ($newValues as $value) {
+                $values[] = str_replace('|', '{{!}}', trim($frame->expand($value)));
             }
         }
 
-        $allowEmpty = ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, true);
+        $allowEmpty = ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, false);
         $templates = self::getTemplates($frame, $templateName, $nargs, $values, $named, $allowEmpty);
+        if (empty($templates)) {
+            return '';
+        }
+
         // show("Templates:\n", $templates);
         $separator = ParserHelper::getSeparator($frame, $magicArgs);
         $output = implode($separator, $templates);
@@ -1006,6 +1007,30 @@ class Riven
         return $before . $output;
     }
 
+    private static function showGetMagicArgs(PPFrame $frame, array $input)
+    {
+        list($magicArgs, $values, $dupes) = $input;
+        $showText = '';
+        $showText .= ("Magic Args:\n");
+        foreach ($magicArgs as $key => $value) {
+            $showText .= $key . ' = ' . $frame->expand($value) . "\n";
+        }
+
+        $showText .= ("\nValues:\n");
+        foreach ($values as $value) {
+            $showText .= $frame->expand($value) . "\n";
+        }
+
+        if (is_array($dupes)) {
+            $showText .= gettype($dupes) . "\nDupes:\n";
+            foreach ($dupes as $key => $value) {
+                $showText .= $key . ' = ' . $frame->expand($value) . "\n";
+            }
+        }
+
+        show($showText);
+    }
+
     /**
      * Splits named arguments from unnamed.
      *
@@ -1019,8 +1044,8 @@ class Riven
         $named = [];
         $unnamed = [];
         if (!is_null($args)) {
-            $unnamed[] = $args[0];
-            for ($i = 1; $i < count($args); $i++) {
+            // $unnamed[] = $args[0];
+            for ($i = 0; $i < count($args); $i++) {
                 list($name, $value) = ParserHelper::getKeyValue($frame, $args[$i]);
                 if (is_null($name)) {
                     $unnamed[] = $value;
