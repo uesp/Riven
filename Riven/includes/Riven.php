@@ -855,7 +855,7 @@ class Riven
         // Figure out what we're dealing with and populate appropriately.
         $templateName = $frame->expand($values[0]);
         $nargs = $frame->expand($values[1]);
-        if (empty($templateName) || $nargs < 1) {
+        if (empty($templateName)) {
             return '';
         }
 
@@ -881,6 +881,10 @@ class Riven
             foreach ($newValues as $value) {
                 $values[] = str_replace('|', '{{!}}', trim($frame->expand($value)));
             }
+        }
+
+        if ($nargs < 1) {
+            return '';
         }
 
         $allowEmpty = ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, false);
