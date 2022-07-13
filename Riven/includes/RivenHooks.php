@@ -64,6 +64,9 @@ class RivenHooks
 		switch ($magicWordId) {
 			case Riven::VR_SKINNAME:
 				$ret = Riven::doSkinName($parser);
+
+				// Cached, but only for the current request (presumably), since user could change their settings at any
+				// time.
 				$variableCache[$magicWordId] = $ret;
 				$parser->getOutput()->updateCacheExpiry(5);
 		}
@@ -102,8 +105,8 @@ class RivenHooks
 	 */
 	private static function initTagFunctions(Parser $parser)
 	{
-		foreach (self::$tagInfo as $k => $v) {
-			ParserHelper::setHookSynonyms($parser, $k, $v);
+		foreach (self::$tagInfo as $key => $value) {
+			ParserHelper::setHookSynonyms($parser, $key, $value);
 		}
 	}
 }
