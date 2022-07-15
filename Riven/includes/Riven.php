@@ -223,7 +223,7 @@ class Riven
             ParserHelper::NA_IFNOT
         );
 
-        if (ParserHelper::checkIfs($magicArgs)) {
+        if (ParserHelper::checkIfs($frame, $magicArgs)) {
             foreach ($values as $title) {
                 $titleText = trim($frame->expand($title));
                 if (self::existsCommon($parser, $titleText)) {
@@ -259,7 +259,7 @@ class Riven
             ParserHelper::NA_IFNOT
         );
 
-        if (!ParserHelper::checkIfs($magicArgs)) {
+        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
 
@@ -294,7 +294,7 @@ class Riven
             ParserHelper::NA_IFNOT
         );
 
-        if (count($values) <= 0 || !ParserHelper::checkIfs($magicArgs)) {
+        if (count($values) <= 0 || !ParserHelper::checkIfs($frame, $magicArgs)) {
             return;
         }
 
@@ -343,7 +343,7 @@ class Riven
         );
 
         $npick = intval(array_shift($values));
-        if ($npick <= 0 || !count($values) || !ParserHelper::checkIfs($magicArgs)) {
+        if ($npick <= 0 || !count($values) || !ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
 
@@ -473,55 +473,6 @@ class Riven
         return self::splitArgsCommon($parser, $frame, $input);
     }
 
-    private static function getTemplates(PPFrame $frame, $templateName, $nargs, array $values, array $named, $allowEmpty)
-    {
-        $nargs = intval($nargs);
-        if (!$nargs) {
-            $nargs = count($values);
-        }
-
-        if (count($values) == 0) {
-            return '';
-        }
-
-        $templates = [];
-        for ($index = 0; $index < count($values); $index += $nargs) {
-            $parameters = '';
-            $blank = true;
-            for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
-                if (!is_array($values)) {
-                    // show('Yes, this is a thing!');
-                    $values = [trim($values)];
-                }
-
-                $value = ParserHelper::arrayGet($values, $index + $paramNum);
-                if (!is_null($value)) {
-                    if (strlen($value) > 0) {
-                        $blank = false;
-                    }
-
-                    // We have to use numbered arguments to avoid the possibility that $value is (or even looks like)
-                    // 'param=value'.
-                    $displayNum = $paramNum + 1;
-                    $parameters .= "|$displayNum=$value";
-                }
-            }
-
-            if ($allowEmpty || !$blank) {
-                foreach ($named as $name => $value) {
-                    $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
-                    $parameters .= "|$name=$value";
-                }
-
-                $template = '{{' . $templateName . $parameters . '}}';
-                // show('Template: ', $template);
-                $templates[] = $template;
-            }
-        }
-
-        return $templates;
-    }
-
     /**
      * Trims links from a block of text.
      *
@@ -564,6 +515,12 @@ class Riven
         }
     }
 
+    /**
+     * Initializes all the relevant aspects of Riven.
+     *
+     * @return void;
+     *
+     */
     public static function init()
     {
         ParserHelper::cacheMagicWords([
@@ -828,77 +785,65 @@ class Riven
     }
 
     /**
-     * Takes the input from the various forms of #splitargs and returns it as a cohesive set of variables.
+     * Creates a list of template calls for #splitargs/#explodeargs
      *
-     * @param Parser $parser
-     * @param PPFrame $frame
-     * @param array $magicArgs
-     * @param array $values
+     * @param PPFrame $frame The frame in use.
+     * @param mixed $templateName The name of the template.
+     * @param mixed $nargs The number of arguments to divide everything up by.
+     * @param array $values Unnamed values to be split up and included with the template.
+     * @param array $named Named values that will be included in *every* template.
+     * @param mixed $allowEmpty Whether the list of templates should include empty inputs.
      *
-     * @return [type]
+     * @return array
      *
      */
-    private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $input)
+    private static function getTemplates(PPFrame $frame, $templateName, $nargs, array $values, array $named, $allowEmpty)
     {
-        list($magicArgs, $values, $dupes) = $input;
-        if (!ParserHelper::checkIfs($magicArgs)) {
-            return '';
+        $nargs = intval($nargs);
+        if (!$nargs) {
+            $nargs = count($values);
         }
 
-        // show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
-        list($named, $values) = self::splitNamedArgs($frame, $values);
-        $named = array_merge($named, $dupes); // Merge in any duplicates now that we've filtered out the ones we want.
-        if (!isset($values[1])) {
-            return '';
+        $templates = [];
+        if (count($values) == 0) {
+            return $templates;
         }
 
-        // Figure out what we're dealing with and populate appropriately.
-        $templateName = $frame->expand($values[0]);
-        $nargs = $frame->expand($values[1]);
-        if (empty($templateName)) {
-            return '';
-        }
+        for ($index = 0; $index < count($values); $index += $nargs) {
+            $parameters = '';
+            $blank = true;
+            for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
+                if (!is_array($values)) {
+                    // show('Yes, this is a thing!');
+                    $values = [trim($values)];
+                }
 
-        if (!is_numeric($nargs) && count($values) > 3) {
-            // Old #explodeargs; can be deleted once all are converted.
-            $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
-            $delimiter = $nargs;
-            $templateName = $frame->expand($values[2]);
-            $nargs = $frame->expand($values[3]);
-            $values = explode($delimiter, $frame->expand($values[0]));
-        } elseif (isset($magicArgs[self::NA_EXPLODE])) {
-            // New explodeargs
-            $delimiter = ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',');
-            $explode = $magicArgs[self::NA_EXPLODE];
-            $values = explode($delimiter, $explode);
-        } else {
-            $newValues = array_slice($values, 2);
-            if (!count($newValues)) {
-                $newValues = $frame->getNumberedArguments();
+                $value = ParserHelper::arrayGet($values, $index + $paramNum);
+                if (!is_null($value)) {
+                    if (strlen($value) > 0) {
+                        $blank = false;
+                    }
+
+                    // We have to use numbered arguments to avoid the possibility that $value is (or even looks like)
+                    // 'param=value'.
+                    $displayNum = $paramNum + 1;
+                    $parameters .= "|$displayNum=$value";
+                }
             }
 
-            $values = [];
-            foreach ($newValues as $value) {
-                $values[] = str_replace('|', '{{!}}', trim($frame->expand($value)));
+            if ($allowEmpty || !$blank) {
+                foreach ($named as $name => $value) {
+                    $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
+                    $parameters .= "|$name=$value";
+                }
+
+                $template = '{{' . $templateName . $parameters . '}}';
+                // show('Template: ', $template);
+                $templates[] = $template;
             }
         }
 
-        if ($nargs < 1) {
-            return '';
-        }
-
-        $allowEmpty = ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, false);
-        $templates = self::getTemplates($frame, $templateName, $nargs, $values, $named, $allowEmpty);
-        if (empty($templates)) {
-            return '';
-        }
-
-        // show("Templates:\n", $templates);
-        $separator = ParserHelper::getSeparator($frame, $magicArgs);
-        $output = implode($separator, $templates);
-        // show("Output:\n", $output);
-
-        return ParserHelper::formatPFForDebug($output, ParserHelper::checkDebugMagic($parser, $frame, $magicArgs));
+        return $templates;
     }
 
     /**
@@ -1011,6 +956,15 @@ class Riven
         return $before . $output;
     }
 
+    /**
+     * For debugging only. Shows results of splitArgs()
+     *
+     * @param PPFrame $frame
+     * @param array $input
+     *
+     * @return [type]
+     *
+     */
     private static function showGetMagicArgs(PPFrame $frame, array $input)
     {
         list($magicArgs, $values, $dupes) = $input;
@@ -1033,6 +987,81 @@ class Riven
         }
 
         show($showText);
+    }
+
+    /**
+     * Takes the input from the various forms of #splitargs and returns it as a cohesive set of variables.
+     *
+     * @param Parser $parser
+     * @param PPFrame $frame
+     * @param array $magicArgs
+     * @param array $values
+     *
+     * @return [type]
+     *
+     */
+    private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $input)
+    {
+        list($magicArgs, $values, $dupes) = $input;
+        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
+            return '';
+        }
+
+        // show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
+        list($named, $values) = self::splitNamedArgs($frame, $values);
+        $named = array_merge($named, $dupes); // Merge in any duplicates now that we've filtered out the ones we want.
+        if (!isset($values[1])) {
+            return '';
+        }
+
+        // Figure out what we're dealing with and populate appropriately.
+        $templateName = $frame->expand($values[0]);
+        $nargs = $frame->expand($values[1]);
+        if (empty($templateName)) {
+            return '';
+        }
+
+        if (!is_numeric($nargs) && count($values) > 3) {
+            // Old #explodeargs; can be deleted once all are converted.
+            $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
+            $delimiter = $nargs;
+            $templateName = $frame->expand($values[2]);
+            $nargs = $frame->expand($values[3]);
+            $values = explode($delimiter, $frame->expand($values[0]));
+        } elseif (isset($magicArgs[self::NA_EXPLODE])) {
+            // New explodeargs
+            $delimiter = ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',');
+            $explode = $magicArgs[self::NA_EXPLODE];
+            $values = explode($delimiter, $explode);
+        } else {
+            $newValues = array_slice($values, 2);
+            if (count($newValues) == 0) {
+                $newValues = $frame->getNumberedArguments();
+                // show($newValues);
+            }
+
+            $values = [];
+            foreach ($newValues as $value) {
+                $values[] = str_replace('|', '{{!}}', trim($frame->expand($value)));
+            }
+        }
+
+        if ($nargs < 1) {
+            return '';
+        }
+
+        $allowEmpty = ParserHelper::arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, false);
+        $templates = self::getTemplates($frame, $templateName, $nargs, $values, $named, $allowEmpty);
+        if (empty($templates)) {
+            return '';
+        }
+
+        // show("Templates:\n", $templates);
+        $separator = ParserHelper::getSeparator($frame, $magicArgs);
+        $output = implode($separator, $templates);
+        // show("Output:\n", $output);
+
+        return ParserHelper::formatPFForDebug($output, ParserHelper::checkDebugMagic($parser, $frame, $magicArgs), false);
     }
 
     /**
