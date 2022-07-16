@@ -232,7 +232,7 @@ class Riven
     }
 
     /**
-     * Finds the first page the list of parameters that exists.
+     * Finds the first page that exists in the list of parameters.
      *
      * @param Parser $parser The parser in use.
      * @param PPFrame $frame The template frame in use.
@@ -537,7 +537,7 @@ class Riven
             }
         }
 
-        self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, array_merge($named, $dupes), $values);
+        return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, array_merge($named, $dupes), $values);
     }
 
     /**
@@ -1088,8 +1088,7 @@ class Riven
         $output = implode($separator, $templates);
         // show("Output:\n", $output);
 
-        $realOutput = ParserHelper::formatPFForDebug($output, ParserHelper::checkDebugMagic($parser, $frame, $magicArgs));
-        return $realOutput;
+        return ParserHelper::formatPFForDebug($output, ParserHelper::checkDebugMagic($parser, $frame, $magicArgs));
     }
 
     /**
