@@ -187,17 +187,48 @@ class Riven
 
     public static function doExplodeArgs(Parser $parser, PPFrame $frame, array $args)
     {
-        $input = ParserHelper::getMagicArgs(
+        list($magicArgs, $values, $dupes) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_ALLOWEMPTY,
             ParserHelper::NA_DEBUG,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT,
-            ParserHelper::NA_SEPARATOR
+            ParserHelper::NA_SEPARATOR,
+            self::NA_DELIMITER
         );
 
-        return self::splitArgsCommon($parser, $frame, $input);
+        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
+            return '';
+        }
+
+        // show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
+        list($named, $values) = self::splitNamedArgs($frame, $values);
+        if (count($values) < 3 || !isset($values[1])) {
+            return '';
+        }
+
+        $nargs = $frame->expand($values[1]);
+        if (!is_numeric($nargs) && count($values) === 4) {
+            // Old #explodeargs; can be deleted once all are converted.
+            $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
+            $delimiter = $nargs;
+            $templateName = $frame->expand($values[2]);
+            $nargs = $frame->expand($values[3]);
+            $values = explode($delimiter, $frame->expand($values[0]));
+        } else {
+            $templateName = $frame->expand($values[0]);
+            $delimiter = $frame->expand(
+                isset($values[3])
+                    ? $values[3]
+                    : ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',')
+            );
+
+            $values = explode($delimiter, $frame->expand($values[2]));
+        }
+
+        // show($values);
+        return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, array_merge($named, $dupes), $values);
     }
 
     /**
@@ -470,7 +501,43 @@ class Riven
             self::NA_EXPLODE
         );
 
-        return self::splitArgsCommon($parser, $frame, $input);
+        list($magicArgs, $values, $dupes) = $input;
+        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
+            return '';
+        }
+
+        // show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
+        list($named, $values) = self::splitNamedArgs($frame, $values);
+        if (!isset($values[1])) {
+            return '';
+        }
+
+        // Figure out what we're dealing with and populate appropriately.
+        $templateName = $frame->expand($values[0]);
+        if (empty($templateName)) {
+            return '';
+        }
+
+        $nargs = $frame->expand($values[1]);
+        if (isset($magicArgs[self::NA_EXPLODE])) {
+            // Explode
+            $explode = $magicArgs[self::NA_EXPLODE];
+            $delimiter = ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',');
+            $values = explode($delimiter, $explode);
+        } else {
+            $newValues = array_slice($values, 2);
+            if (count($newValues) == 0) {
+                $newValues = $frame->getNumberedArguments();
+                // show($newValues);
+            }
+
+            $values = [];
+            foreach ($newValues as $value) {
+                $values[] = str_replace('|', '{{!}}', trim($frame->expand($value)));
+            }
+        }
+
+        self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, array_merge($named, $dupes), $values);
     }
 
     /**
@@ -592,7 +659,7 @@ class Riven
         $map = self::buildMap($input);
         // show($map);
         $sectionHasContent = false;
-        $contentRows = 0;
+        $contentRows = false;
         for ($rowNum = count($map) - 1; $rowNum >= $protectRows; $rowNum--) {
             $row = $map[$rowNum];
             $rowHasContent = false;
@@ -614,7 +681,11 @@ class Riven
             // show('Row: ', $rowNum, "\n", $rowHasContent, "\n", $row);
             $sectionHasContent |= $rowHasContent;
             if ($allHeaders) {
-                if ($contentRows) {
+                // Rownum/proectRow check is a apecial allowance for the top-most header being the only row left in the
+                // table. If so, and if full table deletion is allowed, then delete the "section" even if section has
+                // no content. This can happen if the table starts with a main header followed immediately by a
+                // sub-header.
+                if ($contentRows || ($rowNum === 0 && $protectRows === 0)) {
                     // show($contentRows);
                     if ($sectionHasContent) {
                         $sectionHasContent = false;
@@ -624,9 +695,9 @@ class Riven
                     }
                 }
 
-                $contentRows = 0;
+                $contentRows = false;
             } else {
-                $contentRows++;
+                $contentRows =  true;
                 if (!$rowHasContent) {
                     /** @var TableCell $cell */
                     foreach ($spans as $cell) {
@@ -1000,53 +1071,9 @@ class Riven
      * @return [type]
      *
      */
-    private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $input)
+    private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $magicArgs, $templateName, $nargs, array $named, array $values)
     {
-        list($magicArgs, $values, $dupes) = $input;
-        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
-            return '';
-        }
-
-        // show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
-        list($named, $values) = self::splitNamedArgs($frame, $values);
-        $named = array_merge($named, $dupes); // Merge in any duplicates now that we've filtered out the ones we want.
-        if (!isset($values[1])) {
-            return '';
-        }
-
-        // Figure out what we're dealing with and populate appropriately.
-        $templateName = $frame->expand($values[0]);
-        $nargs = $frame->expand($values[1]);
-        if (empty($templateName)) {
-            return '';
-        }
-
-        if (!is_numeric($nargs) && count($values) > 3) {
-            // Old #explodeargs; can be deleted once all are converted.
-            $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
-            $delimiter = $nargs;
-            $templateName = $frame->expand($values[2]);
-            $nargs = $frame->expand($values[3]);
-            $values = explode($delimiter, $frame->expand($values[0]));
-        } elseif (isset($magicArgs[self::NA_EXPLODE])) {
-            // New explodeargs
-            $delimiter = ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',');
-            $explode = $magicArgs[self::NA_EXPLODE];
-            $values = explode($delimiter, $explode);
-        } else {
-            $newValues = array_slice($values, 2);
-            if (count($newValues) == 0) {
-                $newValues = $frame->getNumberedArguments();
-                // show($newValues);
-            }
-
-            $values = [];
-            foreach ($newValues as $value) {
-                $values[] = str_replace('|', '{{!}}', trim($frame->expand($value)));
-            }
-        }
-
-        if ($nargs < 1) {
+        if ($nargs < 1 || empty($templateName)) {
             return '';
         }
 
@@ -1061,7 +1088,8 @@ class Riven
         $output = implode($separator, $templates);
         // show("Output:\n", $output);
 
-        return ParserHelper::formatPFForDebug($output, ParserHelper::checkDebugMagic($parser, $frame, $magicArgs), false);
+        $realOutput = ParserHelper::formatPFForDebug($output, ParserHelper::checkDebugMagic($parser, $frame, $magicArgs));
+        return $realOutput;
     }
 
     /**
