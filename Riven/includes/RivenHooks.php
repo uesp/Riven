@@ -14,8 +14,8 @@ class RivenHooks
 {
 	/** Tag hooks. To disable a tag, comment the line out. */
 	private static $tagInfo = [
-		#Riven::TG_CLEANSPACE => 'Riven::doCleanSpace',
-		#Riven::TG_CLEANTABLE => 'Riven::doCleanTable'
+		Riven::TG_CLEANSPACE => 'Riven::doCleanSpace',
+		Riven::TG_CLEANTABLE => 'Riven::doCleanTable'
 	];
 
 	/**
