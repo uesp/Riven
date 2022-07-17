@@ -209,23 +209,14 @@ class Riven
         }
 
         $nargs = $frame->expand($values[1]);
-        if (!is_numeric($nargs) && count($values) === 4) {
-            // Old #explodeargs; can be deleted once all are converted.
-            $parser->addTrackingCategory(self::TRACKING_EXPLODEARGS);
-            $delimiter = $nargs;
-            $templateName = $frame->expand($values[2]);
-            $nargs = $frame->expand($values[3]);
-            $values = explode($delimiter, $frame->expand($values[0]));
-        } else {
-            $templateName = $frame->expand($values[0]);
-            $delimiter = $frame->expand(
-                isset($values[3])
-                    ? $values[3]
-                    : ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',')
-            );
+        $templateName = $frame->expand($values[0]);
+        $delimiter = $frame->expand(
+            isset($values[3])
+                ? $values[3]
+                : ParserHelper::arrayGet($magicArgs, self::NA_DELIMITER, ',')
+        );
 
-            $values = explode($delimiter, $frame->expand($values[2]));
-        }
+        $values = explode($delimiter, $frame->expand($values[2]));
 
         // show($values);
         return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, array_merge($named, $dupes), $values);

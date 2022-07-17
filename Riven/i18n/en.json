@@ -4,8 +4,6 @@
     },
     "riven-tracking-arg": "Riven-Pages using arg",
     "riven-tracking-arg-desc": "(Tracking Only) The page uses the {{#arg}} function.",
-    "riven-tracking-explodeargs": "Riven-Pages using explodeargs",
-    "riven-tracking-explodeargs-desc": "The page uses the old {{#explodeargs}} function; it should be converted to use {{#splitargs}}.",
     "riven-tracking-pickfrom": "Riven-Pages using pickfrom",
     "riven-tracking-pickfrom-desc": "(Tracking Only) The page uses the {{#pickfrom}} function.",
     "riven-tracking-rand": "Riven-Pages using rand",
