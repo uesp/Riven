@@ -254,16 +254,18 @@ class Riven
         foreach ($values as $value) {
             $titleText = trim($frame->expand($value));
             $title = Title::newFromText($titleText);
-            $found = false;
-            foreach ($uniqueTitles as $unique) {
-                if ($title->equals($unique)) {
-                    $found = true;
-                    break;
+            if ($title) {
+                $found = false;
+                foreach ($uniqueTitles as $unique) {
+                    if ($title->equals($unique)) {
+                        $found = true;
+                        break;
+                    }
                 }
-            }
 
-            if (!$found) {
-                $uniqueTitles[] = $title;
+                if (!$found) {
+                    $uniqueTitles[] = $title;
+                }
             }
         }
 
