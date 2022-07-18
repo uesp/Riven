@@ -245,12 +245,32 @@ class Riven
             ParserHelper::NA_IFNOT
         );
 
-        if (ParserHelper::checkIfs($frame, $magicArgs)) {
-            foreach ($values as $title) {
-                $titleText = trim($frame->expand($title));
-                if (self::existsCommon($parser, $titleText)) {
-                    return $titleText;
+        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
+            return '';
+        }
+
+        // Build unique titles with simple nested loop, since count is unlikely to ever be large.
+        $uniqueTitles = [];
+        foreach ($values as $value) {
+            $titleText = trim($frame->expand($value));
+            $title = Title::newFromText($titleText);
+            $found = false;
+            foreach ($uniqueTitles as $unique) {
+                if ($title->equals($unique)) {
+                    $found = true;
+                    break;
                 }
+            }
+
+            if (!$found) {
+                $unique[] = $title;
+            }
+        }
+
+        $unique = array_unique($values);
+        foreach ($uniqueTitles as $title) {
+            if (self::existsCommon($parser, $title)) {
+                return $title->getFullText();
             }
         }
 
