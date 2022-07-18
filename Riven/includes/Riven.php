@@ -263,11 +263,10 @@ class Riven
             }
 
             if (!$found) {
-                $unique[] = $title;
+                $uniqueTitles[] = $title;
             }
         }
 
-        $unique = array_unique($values);
         foreach ($uniqueTitles as $title) {
             if (self::existsCommon($parser, $title)) {
                 return $title->getFullText();
@@ -843,26 +842,27 @@ class Riven
         }
 
         $ns = $title->getNamespace();
-        if ($ns == NS_SPECIAL) {
-            return SpecialPageFactory::exists($title->getDBkey());
-        } elseif ($ns == NS_MEDIA) {
-            // This used to be RepoGroup::singleton()->findFile but that seems likely to be very expensive for litlte
-            // or no benefit in this context, so normlize Media to File and just look for that.
-            $title = File::normalizeTitle($title);
-        }
+        switch ($ns) {
+            case NS_SPECIAL:
+                return SpecialPageFactory::exists($title->getDBkey());
+            case NS_MEDIA:
+                if ($parser->incrementExpensiveFunctionCount()) {
+                    $file = RepoGroup::singleton()->getLocalRepo()->newFile($title);
+                    if ($file) {
+                        return $file->exists();
+                    }
+                }
 
-        $pdbk = $title->getPrefixedDBkey();
-        $linkCache = MediaWikiServices::getInstance()->getLinkCache();
-        if (
-            $linkCache->getGoodLinkID($pdbk) !== 0 ||
-            (!$linkCache->isBadLink($pdbk) &&
-                $parser->incrementExpensiveFunctionCount() &&
-                $title->getArticleID() != 0)
-        ) {
-            return true;
+                return false;
+            default:
+                $pdbk = $title->getPrefixedDBkey();
+                $linkCache = MediaWikiServices::getInstance()->getLinkCache();
+                return
+                    $linkCache->getGoodLinkID($pdbk) !== 0 ||
+                    (!$linkCache->isBadLink($pdbk) &&
+                        $parser->incrementExpensiveFunctionCount() &&
+                        $title->getArticleID() != 0);
         }
-
-        return false;
     }
 
     /**
