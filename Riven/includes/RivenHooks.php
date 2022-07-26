@@ -10,7 +10,8 @@ use MediaWiki\MediaWikiServices;
 /**
  * MediaWiki hooks for Riven.
  */
-class RivenHooks
+class RivenHooks /* implements
+	\MediaWiki\Hook\ParserFirstCallInitHook */
 {
 	/** Tag hooks. To disable a tag, comment the line out. */
 	private static $tagInfo = [
@@ -41,7 +42,7 @@ class RivenHooks
 	 */
 	public static function onParserFirstCallInit(Parser $parser)
 	{
-		ParserHelper::init();
+		// ParserHelper::init();
 		self::initParserFunctions($parser);
 		self::initTagFunctions($parser);
 		Riven::init();
@@ -106,7 +107,7 @@ class RivenHooks
 	private static function initTagFunctions(Parser $parser)
 	{
 		foreach (self::$tagInfo as $key => $value) {
-			ParserHelper::setHookSynonyms($parser, $key, $value);
+			ParserHelper::getInstance()->setHookSynonyms($parser, $key, $value);
 		}
 	}
 }
