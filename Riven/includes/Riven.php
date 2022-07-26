@@ -574,45 +574,25 @@ class Riven
             self::NA_MODE
         );
 
-        $methodName = 'replaceLinkHoldersText';
-        $isCallable = is_callable([$parser, $methodName]);
-        if ($isCallable) {
-            $replaceIndirect = $methodName;
-            $stripIndirect = $parser->mStripState;
-        } else {
-            // Make $parser->replaceLinkHoldersText() available via reflection. This is blatantly "a bad thing", but as of
-            // MW 1.35, it's the only way to implement the functionality which was previously public. Failing this, it's
-            // likely we'll have to go back to Regex. Alternatively, the better version may be possible to implement via
-            // preprocessor methods as originally designed, but with a couple of adaptations...needs to be re-checked.
-            // Code derived from top answer here: https://stackoverflow.com/questions/2738663/call-private-methods-and-private-properties-from-outside-a-class-in-php
-            $reflector = new ReflectionObject($parser);
-            $replaceLinks = $reflector->getMethod($methodName);
-            $replaceLinks->setAccessible(true);
-            $stripByName = 'getStripState';
-            $stripIndirect = $parser->$stripByName();
+        $ph = ParserHelper::getInstance();
+        if (!$ph->magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
+            $output = $parser->recursiveTagParse($args[0]);
+            $output = $ph->replaceLinkHoldersText($parser, $output);
+            return $output;
         }
 
-        if (ParserHelper::getInstance()->magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
-            // This was a lot simpler in the original implementation, working strictly by recursively parsing the root
-            // node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
-            // necessitating this mess...which is still better than trying to create a new node structure.
-            $preprocessor = new Preprocessor_Hash($parser);
-            $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
-            $rootNode = $preprocessor->preprocessToObj($args[0], $flag);
-            $output = self::trimLinksParseNode($parser, $frame, $rootNode);
-            $output = $stripIndirect->unstripBoth($output);
-            $output = $isCallable
-                ? $parser->$replaceIndirect($output)
-                : $replaceLinks->invoke($parser, $output);
-            $newNode = $preprocessor->preprocessToObj($output, $flag);
-            $output = $frame->expand($newNode);
-            return [$output, 'noparse' => true];
-        }
-
-        $output = $parser->recursiveTagParse($args[0]);
-        return $isCallable
-            ? $parser->$replaceIndirect($output)
-            : $replaceLinks->invoke($parser, $output);
+        // This was a lot simpler in the original implementation, working strictly by recursively parsing the root
+        // node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
+        // necessitating this mess...which is still better than trying to create a new node structure.
+        $preprocessor = new Preprocessor_Hash($parser);
+        $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
+        $rootNode = $preprocessor->preprocessToObj($args[0], $flag);
+        $output = self::trimLinksParseNode($parser, $frame, $rootNode);
+        $output = $ph->getStripState($parser)->unstripBoth($output);
+        $output = $ph->replaceLinkHoldersText($parser, $output);
+        $newNode = $preprocessor->preprocessToObj($output, $flag);
+        $output = $frame->expand($newNode);
+        return [$output, 'noparse' => true];
     }
 
     /**
