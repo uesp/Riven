@@ -8,6 +8,9 @@ class TableCell
     private $rowspan = 1;
     private $rowspanModified = false;
 
+    private $colSpanRegex = '#\bcolspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
+    private $rowSpanRegex = '#\browspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
+
     /**
      * $parent
      *
@@ -28,12 +31,12 @@ class TableCell
                 $this->attribs = trim($cell['attribs']);
                 $this->content = $cell['content'];
                 $this->isHeader = $cell['name'] === 'th';
-                preg_match('#\bcolspan\s*=\s*([\'"]?)(?<span>\d+)\1#', $this->attribs, $colspan);
+                preg_match($this->colSpanRegex, $this->attribs, $colspan);
                 if ($colspan) {
                     $this->colspan = $colspan['span'];
                 }
 
-                preg_match('#\browspan\s*=\s*([\'"]?)(?<span>\d+)\1#', $this->attribs, $rowspan);
+                preg_match($this->rowSpanRegex, $this->attribs, $rowspan);
                 if ($rowspan) {
                     $this->rowspan = $rowspan['span'];
                 }
@@ -109,7 +112,7 @@ class TableCell
     private function updateRowSpan()
     {
         if ($this->rowspanModified) {
-            $this->attribs = preg_replace('#\s*rowspan\s*=\s*([\'"]?)(\d+)\1#', $this->rowspan === 1 ? '' : " rowspan=$this->rowspan", $this->attribs);
+            $this->attribs = preg_replace($this->rowSpanRegex, $this->rowspan === 1 ? '' : "rowspan=$this->rowspan", $this->attribs);
             $this->rowspanModified = false;
         }
     }
