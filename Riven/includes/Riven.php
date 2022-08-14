@@ -94,6 +94,7 @@ class Riven
      */
     public static function doCleanSpace($text, array $args, Parser $parser, PPFrame $frame)
     {
+        $parser->getOutput()->updateCacheExpiry(0);
         $args = ParserHelper::getInstance()->transformArgs($args);
         $mode = ParserHelper::getInstance()->arrayGet($args, self::NA_MODE);
         $modeWord = ParserHelper::getInstance()->findMagicID($mode, self::AV_ORIGINAL);
@@ -122,7 +123,7 @@ class Riven
 
         // Categories and trails are stripped on ''any'' template page, not just when directly calling the template
         // (but not in pre view mode).
-        if (!$parser->getOptions()->getIsPreview() && $parser->getTitle()->getNamespace() == NS_TEMPLATE) {
+        if ($parser->getTitle()->getNamespace() === NS_TEMPLATE) {
             // save categories before processing
             $precats = $parser->getOutput()->getCategories();
             $output = $parser->recursiveTagParse($output, $frame);
@@ -539,7 +540,6 @@ class Riven
             $newValues = array_slice($values, 2);
             if (count($newValues) == 0) {
                 $newValues = $frame->getNumberedArguments();
-                // show($newValues);
             }
 
             $values = [];
@@ -577,6 +577,7 @@ class Riven
         $ph = ParserHelper::getInstance();
         if (!$ph->magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
             $output = $parser->recursiveTagParse($args[0]);
+            $output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
             $output = $ph->replaceLinkHoldersText($parser, $output);
             return $output;
         }
@@ -674,20 +675,20 @@ class Riven
         $sectionHasContent = false;
         $contentRows = false;
         for ($rowNum = count($map) - 1; $rowNum >= $protectRows; $rowNum--) {
+            /** @var TableCell[] $row */
             $row = $map[$rowNum];
             $rowHasContent = false;
             $allHeaders = true;
+            /** @var TableCell[] $spans */
             $spans = [];
 
             foreach ($row as $cell) {
                 // show($cell);
-                if ($cell instanceof TableCell) {
-                    $content = preg_replace('#\{\{\{[^\}]*\}\}\}#', '', html_entity_decode($cell->getContent()));
-                    $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
-                    $allHeaders &= $cell->isHeader();
-                    if ($cell->getParent()) {
-                        $spans[] = $cell->getParent();
-                    }
+                $content = preg_replace('#\{\{\{[^\}]+\}\}\}#', '', html_entity_decode($cell->getContent()));
+                $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
+                $allHeaders &= $cell->isHeader();
+                if ($cell->getParent()) {
+                    $spans[] = $cell->getParent();
                 }
             }
 
@@ -712,7 +713,6 @@ class Riven
             } else {
                 $contentRows =  true;
                 if (!$rowHasContent) {
-                    /** @var TableCell $cell */
                     foreach ($spans as $cell) {
                         $cell->decrementRowspan();
                         // show('RowCount: ', $cell->getRowspan());
