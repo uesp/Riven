@@ -42,7 +42,6 @@ class RivenHooks /* implements
 	 */
 	public static function onParserFirstCallInit(Parser $parser)
 	{
-		// ParserHelper::init();
 		self::initParserFunctions($parser);
 		self::initTagFunctions($parser);
 		Riven::init();
