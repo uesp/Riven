@@ -94,7 +94,8 @@ class Riven
      */
     public static function doCleanSpace($text, array $args, Parser $parser, PPFrame $frame)
     {
-        $parser->getOutput()->updateCacheExpiry(0);
+        // Definitely don't want every page with a cleanspace being dynamic. Was this necessary or just inserted for testing and missed in cleanup?
+        // $parser->getOutput()->updateCacheExpiry(0);
         $args = ParserHelper::getInstance()->transformArgs($args);
         $mode = ParserHelper::getInstance()->arrayGet($args, self::NA_MODE);
         $modeWord = ParserHelper::getInstance()->findMagicID($mode, self::AV_ORIGINAL);
@@ -671,7 +672,7 @@ class Riven
     {
         // show("Clean Rows In:\n", $input);
         $map = self::buildMap($input);
-        // show($map);
+        // RHshow($map);
         $sectionHasContent = false;
         $contentRows = false;
         for ($rowNum = count($map) - 1; $rowNum >= $protectRows; $rowNum--) {
@@ -684,12 +685,17 @@ class Riven
 
             foreach ($row as $cell) {
                 // show($cell);
-                $content = is_string($cell) ? $cell : $cell->getContent();
-                $content = preg_replace('#\{\{\{[^\}]+\}\}\}#', '', html_entity_decode($content));
-                $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
-                $allHeaders &= $cell->isHeader();
-                if ($cell->getParent()) {
-                    $spans[] = $cell->getParent();
+                // instanceof check necessary to handle 'open' named array element.
+                // TODO: Possibly create a TableRow structure so the 'open' element is clearly its own thing rather
+                // than a named element in the middle of an otherwise numeric array.
+                if ($cell instanceof TableCell) {
+
+                    $content = preg_replace('#\{\{\{[^\}]+\}\}\}#', '', html_entity_decode($cell->getContent()));
+                    $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
+                    $allHeaders &= $cell->isHeader();
+                    if ($cell->getParent()) {
+                        $spans[] = $cell->getParent();
+                    }
                 }
             }
 
