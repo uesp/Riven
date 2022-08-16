@@ -684,7 +684,8 @@ class Riven
 
             foreach ($row as $cell) {
                 // show($cell);
-                $content = preg_replace('#\{\{\{[^\}]+\}\}\}#', '', html_entity_decode($cell->getContent()));
+                $content = is_string($cell) ? $cell : $cell->getContent();
+                $content = preg_replace('#\{\{\{[^\}]+\}\}\}#', '', html_entity_decode($content));
                 $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
                 $allHeaders &= $cell->isHeader();
                 if ($cell->getParent()) {
