@@ -894,8 +894,15 @@ class Riven
             return $templates;
         }
 
+        $namedParameters = '';
+        foreach ($named as $name => $value) {
+            $value = $frame->expand($value);
+            $namedParameters .= "|$name=$value";
+        }
+
+        $templates = [];
         for ($index = 0; $index < count($values); $index += $nargs) {
-            $parameters = '';
+            $numberedParameters = '';
             $blank = true;
             for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
                 if (!is_array($values)) {
@@ -912,17 +919,13 @@ class Riven
                     // We have to use numbered arguments to avoid the possibility that $value is (or even looks like)
                     // 'param=value'.
                     $displayNum = $paramNum + 1;
-                    $parameters .= "|$displayNum=$value";
+                    $numberedParameters .= "|$displayNum=$value";
                 }
             }
 
+            // show('Template: ', $template);
             if ($allowEmpty || !$blank) {
-                foreach ($named as $name => $value) {
-                    $value = $frame->expand($value, PPFrame::RECOVER_ORIG);
-                    $parameters .= "|$name=$value";
-                }
-
-                $template = '{{' . $templateName . $parameters . '}}';
+                $template = '{{' . $templateName . $numberedParameters . $namedParameters . '}}';
                 // show('Template: ', $template);
                 $templates[] = $template;
             }
