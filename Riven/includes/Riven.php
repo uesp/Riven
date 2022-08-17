@@ -624,20 +624,27 @@ class Riven
      */
     private static function buildMap($input)
     {
+        /** @var TableCell[] map */
         $map = [];
-        $rowNum = 0;
         preg_match_all('#(<tr[^>]*>)(.*?)</tr\s*>#is', $input, $rawRows, PREG_SET_ORDER);
+        // Pre-create table so all rows are valid when indexed.
         foreach ($rawRows as $rawRow) {
-            $map[$rowNum]['open'] = $rawRow[1];
+            $map[] =  new TableRow($rawRow[1]);
+        }
+
+        $rowNum = 0;
+        $rowCount = count($map);
+        foreach ($rawRows as $rawRow) {
+            $row = $map[$rowNum];
             $cellNum = 0;
             preg_match_all('#<(?<name>t[dh])\s*(?<attribs>[^>]*)>(?<content>.*?)</\1\s*>#s', $rawRow[0], $rawCells, PREG_SET_ORDER);
             foreach ($rawCells as $rawCell) {
-                $cell = new TableCell($rawCell);
-                while (isset($map[$rowNum][$cellNum])) {
+                while (isset($row->cells[$cellNum])) {
                     $cellNum++;
                 }
 
-                $map[$rowNum][$cellNum] = $cell;
+                $cell = new TableCell($rawCell);
+                $row->cells[$cellNum] = $cell;
                 $rowspan = $cell->getRowspan();
                 $colspan = $cell->getColspan();
                 if ($rowspan > 1 || $colspan > 1) {
@@ -645,7 +652,9 @@ class Riven
                     for ($r = 0; $r < $rowspan; $r++) {
                         for ($c = 0; $c < $colspan; $c++) {
                             if ($r != 0 || $c != 0) {
-                                $map[$rowNum + $r][$cellNum + $c] = $spanCell;
+                                if (($rowNum + $r) < $rowCount) {
+                                    $map[$rowNum + $r]->cells[$cellNum + $c] = $spanCell;
+                                }
                             }
                         }
                     }
@@ -670,36 +679,30 @@ class Riven
      */
     private static function cleanRows($input, $protectRows = 1)
     {
-        // show("Clean Rows In:\n", $input);
+        // RHshow("Clean Rows In:\n", $input);
         $map = self::buildMap($input);
         // RHshow($map);
         $sectionHasContent = false;
         $contentRows = false;
         for ($rowNum = count($map) - 1; $rowNum >= $protectRows; $rowNum--) {
-            /** @var TableCell[] $row */
+            /** @var TableRow $row */
             $row = $map[$rowNum];
             $rowHasContent = false;
             $allHeaders = true;
             /** @var TableCell[] $spans */
             $spans = [];
 
-            foreach ($row as $cell) {
-                // show($cell);
-                // instanceof check necessary to handle 'open' named array element.
-                // TODO: Possibly create a TableRow structure so the 'open' element is clearly its own thing rather
-                // than a named element in the middle of an otherwise numeric array.
-                if ($cell instanceof TableCell) {
-
-                    $content = preg_replace('#\{\{\{[^\}]+\}\}\}#', '', html_entity_decode($cell->getContent()));
-                    $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
-                    $allHeaders &= $cell->isHeader();
-                    if ($cell->getParent()) {
-                        $spans[] = $cell->getParent();
-                    }
+            foreach ($row->cells as $cell) {
+                // RHshow($cell);
+                $content = preg_replace('#\{\{\{[^\}]+\}\}\}#', '', html_entity_decode($cell->getContent()));
+                $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
+                $allHeaders &= $cell->isHeader();
+                if ($cell->getParent()) {
+                    $spans[] = $cell->getParent();
                 }
             }
 
-            // show('Row: ', $rowNum, "\n", $rowHasContent, "\n", $row);
+            // RHshow('Row: ', $rowNum, "\n", $rowHasContent, "\n", $row);
             $sectionHasContent |= $rowHasContent;
             if ($allHeaders) {
                 // Rownum/proectRow check is a apecial allowance for the top-most header being the only row left in the
@@ -707,7 +710,7 @@ class Riven
                 // no content. This can happen if the table starts with a main header followed immediately by a
                 // sub-header.
                 if ($contentRows || ($rowNum === 0 && $protectRows === 0)) {
-                    // show($contentRows);
+                    // RHshow($contentRows);
                     if ($sectionHasContent) {
                         $sectionHasContent = false;
                     } else {
@@ -722,7 +725,7 @@ class Riven
                 if (!$rowHasContent) {
                     foreach ($spans as $cell) {
                         $cell->decrementRowspan();
-                        // show('RowCount: ', $cell->getRowspan());
+                        // RHshow('RowCount: ', $cell->getRowspan());
                     }
 
                     unset($map[$rowNum]);
@@ -730,7 +733,7 @@ class Riven
             }
         }
 
-        // show($map);
+        // RHshow($map);
         return self::mapToTable($map);
     }
 
@@ -991,16 +994,17 @@ class Riven
     private static function mapToTable($map)
     {
         $output = '';
+        /** @var TableRow $row */
         foreach ($map as $row) {
-            $output .= $row['open'] . "\n";
+            $output .= $row->getOpenTag() . "\n";
             /** @var TableCell $cell */
-            foreach ($row as $name => $cell) {
-                if ($name !== 'open') {
-                    // Conditional is to avoid unwanted blank lines in output.
-                    $html = $cell->toHtml();
-                    if ($html) {
-                        $output .= $html . "\n";
-                    }
+            foreach ($row->cells as $cell) {
+                // RHshow($cell);
+                // Conditional is to avoid unwanted blank lines in output.
+                $html = $cell->toHtml();
+                // RHshow($html);
+                if ($html) {
+                    $output .= $html . "\n";
                 }
             }
 
