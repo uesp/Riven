@@ -166,6 +166,7 @@ class Riven
             return $input;
         }
 
+
         $offset = 0;
         $output = '';
         $lastVal = null;
