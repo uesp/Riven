@@ -1045,12 +1045,12 @@ class Riven
 
         if (!is_null($open) && strlen($output) > 0) {
             $output = $open . $output . '</table>';
-            // Inser as Strip item so we don't end up reparsing nested tables.
+            // Insert as Strip item so we don't end up reparsing nested tables.
             $output = $parser->insertStripItem($output);
         }
 
         // RHshow("Before:\n", $before);
-        RHshow("Output:\n", $output);
+        // RHshow("Output:\n", $output);
         return $before . $output;
     }
 
