@@ -153,9 +153,6 @@ class Riven
      */
     public static function doCleanTable($text, $args, Parser $parser, PPFrame $frame)
     {
-        $args = ParserHelper::getInstance()->transformArgs($args);
-        $input = $parser->recursiveTagParse($text, $frame);
-
         // This ensures that tables are not cleaned if being displayed directly on the Template page.
         // Previewing will process cleantable normally.
         if (
@@ -163,28 +160,28 @@ class Riven
             $parser->getTitle()->getNamespace() == NS_TEMPLATE &&
             !$parser->getOptions()->getIsPreview()
         ) {
-            return $input;
+            return $text;
         }
 
-
+        $args = ParserHelper::getInstance()->transformArgs($args);
+        $text = $parser->recursiveTagParse($text, $frame);
+        $text = ParserHelper::getInstance()->getStripState($parser)->unstripNoWiki($text);
         $offset = 0;
         $output = '';
         $lastVal = null;
         $protectRows = intval(ParserHelper::getInstance()->arrayGet($args, self::NA_PROTROWS, 1));
         do {
-            $lastVal = self::parseTable($parser, $input, $offset, $protectRows);
+            $lastVal = self::parseTable($parser, $text, $offset, $protectRows);
             $output .= $lastVal;
         } while ($lastVal);
 
-        $after = substr($input, $offset);
+        $after = substr($text, $offset);
         $output .= $after;
 
         $debug = ParserHelper::getInstance()->checkDebugMagic($parser, $frame, $args);
-        if (strlen($output) > 0 && $debug) {
-            $output = $parser->recursiveTagParseFully($output);
-        }
-
-        return ParserHelper::getInstance()->formatTagForDebug($output, $debug);
+        return $debug
+            ? ['<pre>' . htmlspecialchars($output) . '</pre>', 'markerType' => 'nowiki']
+            : [$output, 'preprocessFlags' => PPFrame::RECOVER_ORIG];
     }
 
     public static function doExplodeArgs(Parser $parser, PPFrame $frame, array $args)
@@ -1048,11 +1045,12 @@ class Riven
 
         if (!is_null($open) && strlen($output) > 0) {
             $output = $open . $output . '</table>';
+            // Inser as Strip item so we don't end up reparsing nested tables.
             $output = $parser->insertStripItem($output);
         }
 
-        // show("Before:\n", $before);
-        // show("Output:\n", $output);
+        // RHshow("Before:\n", $before);
+        RHshow("Output:\n", $output);
         return $before . $output;
     }
 
