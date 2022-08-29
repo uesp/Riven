@@ -30,7 +30,6 @@
 	},
 	"TrackingCategories": [
 		"riven-tracking-arg",
-		"riven-tracking-explodeargs",
 		"riven-tracking-pickfrom",
 		"riven-tracking-rand",
 		"riven-tracking-skinname"
