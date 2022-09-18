@@ -153,6 +153,8 @@ class Riven
      */
     public static function doCleanTable($text, $args, Parser $parser, PPFrame $frame)
     {
+        // RHshow("doCleanTable wikitext:\n", $text);
+
         // This ensures that tables are not cleaned if being displayed directly on the Template page.
         // Previewing will process cleantable normally.
         if (
@@ -165,6 +167,7 @@ class Riven
 
         $args = ParserHelper::getInstance()->transformArgs($args);
         $text = $parser->recursiveTagParse($text, $frame);
+        // RHshow("Tag Parsed:\n", $text);
         $text = ParserHelper::getInstance()->getStripState($parser)->unstripNoWiki($text);
         $offset = 0;
         $output = '';
@@ -175,6 +178,7 @@ class Riven
             $output .= $lastVal;
         } while ($lastVal);
 
+        $output = ParserHelper::getInstance()->getStripState($parser)->unstripGeneral($output);
         $after = substr($text, $offset);
         $output .= $after;
 
@@ -1026,9 +1030,8 @@ class Riven
      */
     private static function parseTable(Parser $parser, $input, &$offset, $protectRows, $open = null)
     {
-        // show("Parse Table In:\n", substr($input, $offset));
+        // RHshow("Parse Table In:\n", substr($input, $offset));
         $output = '';
-        $before = null;
         while (preg_match('#</?table[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
             $match = $matches[0];
             $output .= substr($input, $offset, $match[1] - $offset);
@@ -1049,9 +1052,8 @@ class Riven
             $output = $parser->insertStripItem($output);
         }
 
-        // RHshow("Before:\n", $before);
         // RHshow("Output:\n", $output);
-        return $before . $output;
+        return $output;
     }
 
     /**
