@@ -10,6 +10,7 @@ $magicWords['en'] = [
 	'riven-smart' => [0, 'smart'],
 	'riven-top' => [0, 'top'],
 
+	'riven-cleanimages' => [0, 'cleanimages'],
 	'riven-delimiter' => [0, 'delimiter', 'sa:delimiter'],
 	'riven-explode' => [0, 'explode', 'sa:explode'],
 	'riven-mode' => [0, 'mode'],

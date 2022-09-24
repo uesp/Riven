@@ -19,6 +19,7 @@ class Riven
     const AV_SMART     = 'riven-smart';
     const AV_TOP       = 'riven-top';
 
+    const NA_CLEANIMG  = 'riven-cleanimages';
     const NA_DELIMITER = 'riven-delimiter';
     const NA_EXPLODE   = 'riven-explode';
     const NA_MODE      = 'riven-mode';
@@ -165,16 +166,20 @@ class Riven
             return $text;
         }
 
+        // RHshow('Pre-args: ', $args);
         $args = ParserHelper::getInstance()->transformArgs($args);
+        // RHshow('Post Args: ', $args);
         $text = $parser->recursiveTagParse($text, $frame);
         // RHshow("Tag Parsed:\n", $text);
+
         $text = ParserHelper::getInstance()->getStripState($parser)->unstripNoWiki($text);
         $offset = 0;
         $output = '';
         $lastVal = null;
         $protectRows = intval(ParserHelper::getInstance()->arrayGet($args, self::NA_PROTROWS, 1));
+        $cleanImages = intval(ParserHelper::getInstance()->arrayGet($args, self::NA_CLEANIMG, 1));
         do {
-            $lastVal = self::parseTable($parser, $text, $offset, $protectRows);
+            $lastVal = self::parseTable($parser, $text, $offset, $protectRows, $cleanImages);
             $output .= $lastVal;
         } while ($lastVal);
 
@@ -609,6 +614,7 @@ class Riven
     {
         ParserHelper::getInstance()->cacheMagicWords([
             self::AV_TOP,
+            self::NA_CLEANIMG,
             self::NA_DELIMITER,
             self::NA_EXPLODE,
             self::NA_MODE,
@@ -626,7 +632,7 @@ class Riven
      */
     private static function buildMap($input)
     {
-        /** @var TableCell[] map */
+        /** @var TableRow[] map */
         $map = [];
         preg_match_all('#(<tr[^>]*>)(.*?)</tr\s*>#is', $input, $rawRows, PREG_SET_ORDER);
         // Pre-create table so all rows are valid when indexed.
@@ -679,7 +685,7 @@ class Riven
      * back to the home cell.
      *
      */
-    private static function cleanRows($input, $protectRows = 1)
+    private static function cleanRows($input, $protectRows = 1, $cleanImages = 1)
     {
         // RHshow("Clean Rows In:\n", $input);
         $map = self::buildMap($input);
@@ -690,14 +696,46 @@ class Riven
             /** @var TableRow $row */
             $row = $map[$rowNum];
             $rowHasContent = false;
+            $rowHasNonImageCells = false;
+            $rowHasImageOnlyCells = false;
             $allHeaders = true;
             /** @var TableCell[] $spans */
             $spans = [];
 
             foreach ($row->cells as $cell) {
                 // RHshow($cell);
-                $content = preg_replace('#\{\{\{[^\}]+\}\}\}#', '', html_entity_decode($cell->getContent()));
-                $rowHasContent |= strlen($content) > 0 && !$cell->isHeader() && !ctype_space($content);
+                $content = trim(html_entity_decode($cell->getContent()));
+                if ($cleanImages) {
+                    // Remove <img> tags
+                    $content = preg_replace('#<img[^>]+?/>#', '', $content, -1, $count);
+                    $initialCount = $count;
+                    if ($count > 0) {
+                        while ($count > 0) {
+                            // Removes any content-free open/close tags that used to surround the removed image.
+                            $content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $count);
+                        }
+                    }
+
+                    $content = trim($content);
+                    if (strlen($content) == 0) {
+                        if ($initialCount > 0) {
+                            $rowHasImageOnlyCells = true;
+                        }
+                    } else {
+                        // RHshow('\'', $content, '\'');
+                        $rowHasNonImageCells |= !$cell->isHeader();
+                    }
+                }
+
+                // Remove unassigned {{{parameter values}}}
+                $content = preg_replace('#\{{3}[^\}]+\}{3}#', '', $content, -1, $count);
+                while ($count > 0) {
+                    // Removes any content-free open/close tags that used to surround the removed text.
+                    $content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $count);
+                }
+
+                $content = trim($content);
+                $rowHasContent |= strlen($content) > 0 && !$cell->isHeader();
                 $allHeaders &= $cell->isHeader();
                 if ($cell->getParent()) {
                     $spans[] = $cell->getParent();
@@ -705,9 +743,10 @@ class Riven
             }
 
             // RHshow('Row: ', $rowNum, "\n", $rowHasContent, "\n", $row);
+            $rowHasContent |= $rowHasImageOnlyCells && !$rowHasNonImageCells;
             $sectionHasContent |= $rowHasContent;
             if ($allHeaders) {
-                // Rownum/proectRow check is a apecial allowance for the top-most header being the only row left in the
+                // Rownum/protectrow check is a apecial allowance for the top-most header being the only row left in the
                 // table. If so, and if full table deletion is allowed, then delete the "section" even if section has
                 // no content. This can happen if the table starts with a main header followed immediately by a
                 // sub-header.
@@ -1028,7 +1067,7 @@ class Riven
      * @return string The cleaned results.
      *
      */
-    private static function parseTable(Parser $parser, $input, &$offset, $protectRows, $open = null)
+    private static function parseTable(Parser $parser, $input, &$offset, $protectRows, $cleanImages, $open = null)
     {
         // RHshow("Parse Table In:\n", substr($input, $offset));
         $output = '';
@@ -1037,11 +1076,11 @@ class Riven
             $output .= substr($input, $offset, $match[1] - $offset);
             $offset = $match[1] + strlen($match[0]);
             if ($match[0][1] == '/') {
-                $output = self::cleanRows($output, $protectRows);
+                $output = self::cleanRows($output, $protectRows, $cleanImages);
                 // show("Clean Rows Out:\n", $output);
                 break;
             } else {
-                $output .= self::parseTable($parser, $input, $offset, $protectRows, $match[0]);
+                $output .= self::parseTable($parser, $input, $offset, $protectRows, $cleanImages, $match[0]);
                 // show("Parse Table Out:\n", $output);
             }
         }
