@@ -1,6 +1,2 @@
-Update.bat
-updatesfwiki.txt
-updatesfwiki.txt.bak
-updatesfwikidev.txt
-updateuesp.txt
-updateuespdev.txt
+*.bat
+*.txt
