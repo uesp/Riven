@@ -696,8 +696,8 @@ class Riven
             /** @var TableRow $row */
             $row = $map[$rowNum];
             $rowHasContent = false;
-            $rowHasNonImageCells = false;
             $rowHasImageOnlyCells = false;
+            $rowHasNonImageCells = false;
             $allHeaders = true;
             /** @var TableCell[] $spans */
             $spans = [];
@@ -705,7 +705,7 @@ class Riven
             foreach ($row->cells as $cell) {
                 // RHshow($cell);
                 $content = trim(html_entity_decode($cell->getContent()));
-                if ($cleanImages) {
+                if ($cleanImages && !$cell->isHeader()) {
                     // Remove <img> tags
                     $content = preg_replace('#<img[^>]+?/>#', '', $content, -1, $count);
                     $initialCount = $count;
