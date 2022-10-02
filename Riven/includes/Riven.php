@@ -398,7 +398,7 @@ class Riven
             return '';
         }
 
-        $values = ParserHelper::getInstance()->expandArray($frame, $values, 0, true);
+        $values = ParserHelper::getInstance()->expandArray($frame, $values, true);
         $allowEmpty = ParserHelper::getInstance()->arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, '');
         if (!$allowEmpty) {
             $values = array_values(array_filter($values, function ($value) {
