@@ -61,9 +61,9 @@ class Riven
      *     1: The name of the argument to look for.
      *     2: If the argument above isn't found, return this value instead.
      *
-     * @return The value found or the default value. Failing all else,
+     * @return ?string The value found or the default value. Failing all else,
      */
-    public static function doArg(Parser $parser, PPFrame $frame, array $args)
+    public static function doArg(Parser $parser, PPFrame $frame, array $args): ?string
     {
         $parser->addTrackingCategory(self::TRACKING_ARG);
         $parser->getOutput()->updateCacheExpiry(0);
@@ -76,7 +76,7 @@ class Riven
     /**
      * Removes whitespace surrounding HTML tags, links and other parser functions.
      *
-     * @param mixed $text The text to clean.
+     * @param string $text The text to clean.
      * @param array $args The tag arguments:
      *     mode:  Select strategy for removal. Note that in the first two modes, this is an intelligent search and will
      *            only match what the wiki identifies as links and templates.
@@ -88,17 +88,17 @@ class Riven
      *     debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show even
      *            when saved.
      * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The templare frame in use.
+     * @param PPFrame $frame The template frame in use.
      *
      * @return string Cleaned text.
      *
      */
-    public static function doCleanSpace($text, array $args, Parser $parser, PPFrame $frame)
+    public static function doCleanSpace(string $text, array $args, Parser $parser, PPFrame $frame): string
     {
         // Definitely don't want every page with a cleanspace being dynamic. Was this necessary or just inserted for testing and missed in cleanup?
         // $parser->getOutput()->updateCacheExpiry(0);
         $args = ParserHelper::getInstance()->transformArgs($args);
-        $mode = ParserHelper::getInstance()->arrayGet($args, self::NA_MODE);
+        $mode = $args[self::NA_MODE] ?? self::AV_ORIGINAL;
         $modeWord = ParserHelper::getInstance()->findMagicID($mode, self::AV_ORIGINAL);
         $output = $text;
         if ($modeWord !== self::AV_ORIGINAL) {
@@ -141,7 +141,7 @@ class Riven
     /**
      * Cleans a table of all empty rows.
      *
-     * @param mixed $text The text containing the tables to clean.
+     * @param string $text The text containing the tables to clean.
      * @param array $args The tag arguments:
      *     protectrows: The number of rows at the top of the table that will not be removed no matter what.
      *     debug:       Set to PHP true to show the cleaned table code on-screen during Show Preview. Set to 'always'
@@ -152,9 +152,9 @@ class Riven
      * @return string Cleaned text.
      *
      */
-    public static function doCleanTable($text, $args, Parser $parser, PPFrame $frame)
+    public static function doCleanTable(string $text, array $args, Parser $parser, PPFrame $frame): string
     {
-        // RHshow("doCleanTable wikitext:\n", $text);
+        // RHshow("doCleanTable wiki text:\n", $text);
 
         // This ensures that tables are not cleaned if being displayed directly on the Template page.
         // Previewing will process cleantable normally.
@@ -176,8 +176,8 @@ class Riven
         $offset = 0;
         $output = '';
         $lastVal = null;
-        $protectRows = intval(ParserHelper::getInstance()->arrayGet($args, self::NA_PROTROWS, 1));
-        $cleanImages = intval(ParserHelper::getInstance()->arrayGet($args, self::NA_CLEANIMG, 1));
+        $protectRows = intval($args[self::NA_PROTROWS] ?? 1);
+        $cleanImages = intval($args[self::NA_CLEANIMG] ?? 1);
         do {
             $lastVal = self::parseTable($parser, $text, $offset, $protectRows, $cleanImages);
             $output .= $lastVal;
@@ -193,8 +193,24 @@ class Riven
             : [$output, 'preprocessFlags' => PPFrame::RECOVER_ORIG];
     }
 
+    /**
+     * A variant of #splitargs. See that function for details.
+     *
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param array $args Function arguments:
+     *
+     *
+     * @return string The list of functions to call as a reuslt of the split.
+     *
+     */
     public static function doExplodeArgs(Parser $parser, PPFrame $frame, array $args)
     {
+        /**
+         * @var array $magicArgs
+         * @var array $values
+         * @var array $dupes
+         */
         list($magicArgs, $values, $dupes) = ParserHelper::getInstance()->getMagicArgs(
             $frame,
             $args,
@@ -211,17 +227,21 @@ class Riven
         }
 
         // show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
+        /**
+         * @var array $named
+         * @var array $values
+         */
         list($named, $values) = self::splitNamedArgs($frame, $values);
         if (count($values) < 3 || !isset($values[1])) {
             return '';
         }
 
-        $nargs = $frame->expand($values[1]);
+        $nargs = intval($frame->expand($values[1]));
         $templateName = $frame->expand($values[0]);
         $delimiter = $frame->expand(
             isset($values[3])
                 ? $values[3]
-                : ParserHelper::getInstance()->arrayGet($magicArgs, self::NA_DELIMITER, ',')
+                : $magicArgs[self::NA_DELIMITER] ?? ','
         );
 
         $values = explode($delimiter, $frame->expand($values[2]));
@@ -239,10 +259,10 @@ class Riven
      *       1-n: All unnamed parameters are page names to search.
      *        if: A condition that must be true in order for this function to run.
      *     ifnot: A condition that must be false in order for this function to run.
-     * @return [type]
+     * @return string The first title that exists.
      *
      */
-    public static function doFindFirst(Parser $parser, PPFrame $frame, array $args)
+    public static function doFindFirst(Parser $parser, PPFrame $frame, array $args): string
     {
         // This is just a loop over the core of #ifexistsx. Timing tests on other methods have so far failed thanks to
         // the existing cache mechanisms behind title checks.
@@ -301,7 +321,7 @@ class Riven
      * @return string The result of the check or an empty string if the if/ifnot failed.
      *
      */
-    public static function doIfExistX(Parser $parser, PPFrame $frame, array $args)
+    public static function doIfExistX(Parser $parser, PPFrame $frame, array $args): string
     {
         list($magicArgs, $values) = ParserHelper::getInstance()->getMagicArgs(
             $frame,
@@ -314,9 +334,9 @@ class Riven
             return '';
         }
 
-        $titleText = trim($frame->expand(ParserHelper::getInstance()->arrayGet($values, 0, '')));
-        $result = self::existsCommon($parser, $titleText) ? 1 : 2;
-        $result = ParserHelper::getInstance()->arrayGet($values, $result);
+        $titleText = trim($frame->expand($values[0] ?? ''));
+        $result = self::existsCommon($parser, Title::newFromText($titleText)) ? 1 : 2;
+        $result = $values[$result];
         return is_null($result) ? '' : trim($frame->expand($result));
     }
 
@@ -332,10 +352,10 @@ class Riven
      *        if: A condition that must be true in order for this function to run.
      *     ifnot: A condition that must be false in order for this function to run.
      *
-     * @return string
+     * @return string The template name to call, if found.
      *
      */
-    public static function doInclude(Parser $parser, PPFrame $frame, array $args)
+    public static function doInclude(Parser $parser, PPFrame $frame, array $args): string
     {
         list($magicArgs, $values) = ParserHelper::getInstance()->getMagicArgs(
             $frame,
@@ -346,7 +366,7 @@ class Riven
         );
 
         if (count($values) <= 0 || !ParserHelper::getInstance()->checkIfs($frame, $magicArgs)) {
-            return;
+            return '';
         }
 
         $output = '';
@@ -377,10 +397,10 @@ class Riven
      *          seed: The number to use to initialize the random sequence.
      *     separator: The separator to use between entries. Defaults to \n.
      *
-     * @return string
+     * @return string The randomized result.
      *
      */
-    public static function doPickFrom(Parser $parser, PPFrame $frame, array $args)
+    public static function doPickFrom(Parser $parser, PPFrame $frame, array $args): string
     {
         $parser->addTrackingCategory(self::TRACKING_PICKFROM);
         list($magicArgs, $values) = ParserHelper::getInstance()->getMagicArgs(
@@ -399,7 +419,7 @@ class Riven
         }
 
         $values = ParserHelper::getInstance()->expandArray($frame, $values, true);
-        $allowEmpty = ParserHelper::getInstance()->arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, '');
+        $allowEmpty = $magicArgs[ParserHelper::NA_ALLOWEMPTY] ?? '';
         if (!$allowEmpty) {
             $values = array_values(array_filter($values, function ($value) {
                 return strlen($value);
@@ -415,7 +435,7 @@ class Riven
         // Shuffle uses the basic randomizer, so we seed with srand if requested.
         // As of PHP 7.1.0, shuffle uses the mt randomizer, but srand is then aliased to mt_srand, so no urgent need to
         // change it.
-        $seed = ParserHelper::getInstance()->arrayGet($magicArgs, self::NA_SEED);
+        $seed = $magicArgs[self::NA_SEED];
         if (is_null($seed)) {
             // We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based
             // seed will cause all subsequent calls to srand to only generate hourly results).
@@ -430,7 +450,7 @@ class Riven
             $values = array_splice($values, 0, $npick); // cut off unwanted items
         }
 
-        $separator = ParserHelper::getInstance()->getSeparator($frame, $magicArgs);
+        $separator = ParserHelper::getInstance()->getSeparator($magicArgs);
         return implode($separator, $values);
     }
 
@@ -450,7 +470,7 @@ class Riven
      *     Both parameters: Random number between {from}-{to}.
      *
      */
-    public static function doRand(Parser $parser, PPFrame $frame, array $args)
+    public static function doRand(Parser $parser, PPFrame $frame, array $args): string
     {
         $parser->addTrackingCategory(self::TRACKING_RAND);
         list($magicArgs, $values) = ParserHelper::getInstance()->getMagicArgs(
@@ -461,10 +481,10 @@ class Riven
 
         if (count($values) == 1) {
             $low = 1;
-            $high = trim($frame->expand(ParserHelper::getInstance()->arrayGet($values, 0)));
+            $high = trim($frame->expand($values[0]));
         } else {
-            $low = trim($frame->expand(ParserHelper::getInstance()->arrayGet($values, 0)));
-            $high = trim($frame->expand(ParserHelper::getInstance()->arrayGet($values, 1)));
+            $low = trim($frame->expand($values[0]));
+            $high = trim($frame->expand($values[1]));
         }
 
         $low = strlen($low) ? intval($low) : 1;
@@ -492,7 +512,7 @@ class Riven
      *
      * @return string The name of the current skin.
      */
-    public static function doSkinName(Parser $parser)
+    public static function doSkinName(Parser $parser): string
     {
         $parser->addTrackingCategory(self::TRACKING_SKINNAME);
         return RequestContext::getMain()->getSkin()->getSkinName();
@@ -505,9 +525,9 @@ class Riven
      * @param PPFrame $frame The template frame in use.
      * @param array $args Function arguments:
      *
-     * @return string
+     * @return string The text of all function calls after splitting.
      */
-    public static function doSplitArgs(Parser $parser, PPFrame $frame, array $args)
+    public static function doSplitArgs(Parser $parser, PPFrame $frame, array $args): string
     {
         $input = ParserHelper::getInstance()->getMagicArgs(
             $frame,
@@ -521,6 +541,11 @@ class Riven
             self::NA_EXPLODE
         );
 
+        /**
+         * @var array $magicArgs
+         * @var array $values
+         * @var array $dupes
+         */
         list($magicArgs, $values, $dupes) = $input;
         if (!ParserHelper::getInstance()->checkIfs($frame, $magicArgs)) {
             return '';
@@ -538,11 +563,11 @@ class Riven
             return '';
         }
 
-        $nargs = $frame->expand($values[1]);
+        $nargs = intval($frame->expand($values[1]));
         if (isset($magicArgs[self::NA_EXPLODE])) {
             // Explode
             $explode = $magicArgs[self::NA_EXPLODE];
-            $delimiter = ParserHelper::getInstance()->arrayGet($magicArgs, self::NA_DELIMITER, ',');
+            $delimiter = $magicArgs[self::NA_DELIMITER] ?? ',';
             $values = explode($delimiter, $explode);
         } else {
             $newValues = array_slice($values, 2);
@@ -568,9 +593,9 @@ class Riven
      *     mode: The only option currently is "smart", which uses the preprocessor to parse the code with near-perfect
      *           results.
      *
-     * @return string
+     * @return string The resulting text after having links stripped.
      */
-    public static function doTrimLinks(Parser $parser, PPFrame $frame, array $args)
+    public static function doTrimLinks(Parser $parser, PPFrame $frame, array $args): string
     {
         if (!isset($args[0])) {
             return '';
@@ -590,6 +615,7 @@ class Riven
             return $output;
         }
 
+        // TODO: Have another look at this. The original approach may actually be doable.
         // This was a lot simpler in the original implementation, working strictly by recursively parsing the root
         // node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
         // necessitating this mess...which is still better than trying to create a new node structure.
@@ -610,7 +636,7 @@ class Riven
      * @return void;
      *
      */
-    public static function init()
+    public static function init(): void
     {
         ParserHelper::getInstance()->cacheMagicWords([
             self::AV_TOP,
@@ -626,11 +652,11 @@ class Riven
     /**
      * Maps out a table and converts it to a collection of TableCells.
      *
-     * @param mixed $input The text of the map to convert.
+     * @param string $input The HTML text of the table to convert.
      *
      * @return array A collection of TableCells that represents the table provided.
      */
-    private static function buildMap($input)
+    private static function buildMap(string $input): array
     {
         /** @var TableRow[] map */
         $map = [];
@@ -651,12 +677,12 @@ class Riven
                     $cellNum++;
                 }
 
-                $cell = new TableCell($rawCell);
+                $cell = TableCell::FromMatch($rawCell);
                 $row->cells[$cellNum] = $cell;
                 $rowspan = $cell->getRowspan();
                 $colspan = $cell->getColspan();
                 if ($rowspan > 1 || $colspan > 1) {
-                    $spanCell = new TableCell($cell);
+                    $spanCell = TableCell::SpanChild($cell);
                     for ($r = 0; $r < $rowspan; $r++) {
                         for ($c = 0; $c < $colspan; $c++) {
                             if ($r != 0 || $c != 0) {
@@ -678,14 +704,15 @@ class Riven
     /**
      * Removes emptry rows from the output.
      *
-     * @param mixed $input The text to work on.
+     * @param string $input The text to work on.
      * @param int $protectRows The number of rows to protect at the top of the table.
+     * @param bool $cleanImages Whether to clean images in cells that aren't headers.
      *
      * @return TableCell[] A map of every cell in the table. Those with spans will appear as individual cells with a link
      * back to the home cell.
      *
      */
-    private static function cleanRows($input, $protectRows = 1, $cleanImages = 1)
+    private static function cleanRows(string $input, int $protectRows = 1, bool $cleanImages = true): string
     {
         // RHshow("Clean Rows In:\n", $input);
         $map = self::buildMap($input);
@@ -705,7 +732,7 @@ class Riven
             foreach ($row->cells as $cell) {
                 // RHshow($cell);
                 $content = trim(html_entity_decode($cell->getContent()));
-                if ($cleanImages && !$cell->isHeader()) {
+                if ($cleanImages && !$cell->getIsHeader()) {
                     // Remove <img> tags
                     $content = preg_replace('#<img[^>]+?/>#', '', $content, -1, $count);
                     $initialCount = $count;
@@ -723,7 +750,7 @@ class Riven
                         }
                     } else {
                         // RHshow('\'', $content, '\'');
-                        $rowHasNonImageCells |= !$cell->isHeader();
+                        $rowHasNonImageCells |= !$cell->getIsHeader();
                     }
                 }
 
@@ -735,8 +762,8 @@ class Riven
                 }
 
                 $content = trim($content);
-                $rowHasContent |= strlen($content) > 0 && !$cell->isHeader();
-                $allHeaders &= $cell->isHeader();
+                $rowHasContent |= strlen($content) > 0 && !$cell->getIsHeader();
+                $allHeaders &= $cell->getIsHeader();
                 if ($cell->getParent()) {
                     $spans[] = $cell->getParent();
                 }
@@ -781,13 +808,14 @@ class Riven
     /**
      * Cleans the table using the MediaWiki pre-processor. This is used for both "top" and "recursive" modes.
      *
+     * @param PPFrame $frame The template frame in use.
      * @param PPNode $node The pre-processor node to clean.
      * @param mixed $recurse Whether to recurse into the node.
      *
      * @return string The wiki text after cleaning it.
      *
      */
-    private static function cleanSpaceNode(PPFrame $frame, PPNode $node)
+    private static function cleanSpaceNode(PPFrame $frame, PPNode $node): string
     {
         // This had been a fairly simple method but changes in MW 1.28 made it much more complex. The former
         // "recursive" mode was also abandoned for this reason.
@@ -842,12 +870,12 @@ class Riven
      * functionality from the original MetaTemplate, as that no longer seems to apply to the trails. Looking through
      * the history, I'm not sure if it ever did.
      *
-     * @param mixed $text The original text inside the <cleanspace> tags.
+     * @param string $text The original text inside the <cleanspace> tags.
      *
      * @return string The replacement text.
      *
      */
-    private static function cleanSpaceOriginal($text)
+    private static function cleanSpaceOriginal(string $text): string
     {
         return preg_replace('/([\]\}\>])\s+([\<\{\[])/s', '$1$2', $text);
     }
@@ -861,10 +889,10 @@ class Riven
      * @param mixed $recurse Whether to recurse into other templates and links. (Removed from code for now, but may be
      *                       re-implemented later.)
      *
-     * @return [type]
+     * @return string The wiki text after cleaning it.
      *
      */
-    private static function cleanSpacePP(Parser $parser, PPFrame $frame, $text)
+    private static function cleanSpacePP(Parser $parser, PPFrame $frame, $text): string
     {
         $rootNode = $parser->getPreprocessor()->preprocessToObj($text);
         return self::cleanSpaceNode($frame, $rootNode);
@@ -874,19 +902,13 @@ class Riven
      * Checks if a title by the name of $titleText exists.
      *
      * @param Parser $parser The parser in use.
-     * @param mixed $titleText The title to search for.
+     * @param ?Title $title The title to search for.
      *
-     * @return boolean True if the file was found; otherwise, false.
+     * @return bool True if the file was found; otherwise, false.
      *
      */
-    private static function existsCommon(Parser $parser, $titleText)
+    private static function existsCommon(Parser $parser, ?Title $title): bool
     {
-        if ($titleText instanceof Title) {
-            $title = $titleText;
-        } else {
-            $title = Title::newFromText($titleText);
-        }
-
         if (!$title || $title->isExternal()) {
             return false;
         }
@@ -923,17 +945,17 @@ class Riven
     /**
      * Creates a list of template calls for #splitargs/#explodeargs
      *
-     * @param PPFrame $frame The frame in use.
-     * @param mixed $templateName The name of the template.
-     * @param mixed $nargs The number of arguments to divide everything up by.
+     * @param PPFrame $frame The template frame in use.
+     * @param string $templateName The name of the template.
+     * @param int $nargs The number of arguments to divide everything up by.
      * @param array $values Unnamed values to be split up and included with the template.
      * @param array $named Named values that will be included in *every* template.
-     * @param mixed $allowEmpty Whether the list of templates should include empty inputs.
+     * @param bool $allowEmpty Whether the list of templates should include empty inputs.
      *
-     * @return array
+     * @return array A string[] containing the individual template calls that #splitargs splits into.
      *
      */
-    private static function getTemplates(PPFrame $frame, $templateName, $nargs, array $values, array $named, $allowEmpty)
+    private static function getTemplates(PPFrame $frame, string $templateName, int $nargs, array $values, array $named, bool $allowEmpty): array
     {
         $nargs = intval($nargs);
         if (!$nargs) {
@@ -961,7 +983,7 @@ class Riven
                     $values = [trim($values)];
                 }
 
-                $value = ParserHelper::getInstance()->arrayGet($values, $index + $paramNum);
+                $value = $values[$index + $paramNum];
                 if (!is_null($value)) {
                     if (strlen($value) > 0) {
                         $blank = false;
@@ -993,7 +1015,7 @@ class Riven
      * @return bool True if the node is a link; otherwise, false.
      *
      */
-    private static function isLink(PPNode $node)
+    private static function isLink(PPNode $node): bool
     {
         return $node instanceof PPNode_Hash_Text && substr($node->value, 0, 2) === '[[';
     }
@@ -1001,12 +1023,12 @@ class Riven
     /**
      * Indicates whether the node provided can be trimmed out of the table if the content is empty.
      *
-     * @param PPNode|null $node The node to check.
+     * @param ?PPNode $node The node to check.
      *
      * @return bool
      *
      */
-    private static function isTrimmable(PPNode $node = null)
+    private static function isTrimmable(PPNode $node = null): bool
     {
         // Is it a template?
         if ($node instanceof PPTemplateFrame_Hash) {
@@ -1027,12 +1049,12 @@ class Riven
     /**
      * Converts a cell map back to an HTML table.
      *
-     * @param mixed $map The cell map provided by buildMap().
+     * @param array $map The row/cell map provided by buildMap().
      *
      * @return string The HTML text for the table.
      *
      */
-    private static function mapToTable($map)
+    private static function mapToTable(array $map): string
     {
         $output = '';
         /** @var TableRow $row */
@@ -1062,12 +1084,12 @@ class Riven
      * @param mixed $input The table to work on.
      * @param mixed $offset Where in the table we're looking at. This is used in cleaning nested tables.
      * @param mixed $protectRows The number of rows at the top of the table that should not be removed, no matter what.
-     * @param null $open The table tag that was found during recursion. This can be null for the outermost table.
+     * @param ?string $open The table tag that was found during recursion. This can be null for the outermost table.
      *
      * @return string The cleaned results.
      *
      */
-    private static function parseTable(Parser $parser, $input, &$offset, $protectRows, $cleanImages, $open = null)
+    private static function parseTable(Parser $parser, $input, &$offset, int $protectRows, bool $cleanImages, ?string $open = null)
     {
         // RHshow("Parse Table In:\n", substr($input, $offset));
         $output = '';
@@ -1096,63 +1118,40 @@ class Riven
     }
 
     /**
-     * For debugging only. Shows results of splitArgs()
-     *
-     * @param PPFrame $frame
-     * @param array $input
-     *
-     * @return [type]
-     *
-     */
-    private static function showGetMagicArgs(PPFrame $frame, array $input)
-    {
-        list($magicArgs, $values, $dupes) = $input;
-        $showText = '';
-        $showText .= ("Magic Args:\n");
-        foreach ($magicArgs as $key => $value) {
-            $showText .= $key . ' = ' . $frame->expand($value) . "\n";
-        }
-
-        $showText .= ("\nValues:\n");
-        foreach ($values as $value) {
-            $showText .= $frame->expand($value) . "\n";
-        }
-
-        if (is_array($dupes)) {
-            $showText .= gettype($dupes) . "\nDupes:\n";
-            foreach ($dupes as $key => $value) {
-                $showText .= $key . ' = ' . $frame->expand($value) . "\n";
-            }
-        }
-
-        // RHDebug::show($showText);
-    }
-
-    /**
      * Takes the input from the various forms of #splitargs and returns it as a cohesive set of variables.
      *
-     * @param Parser $parser
-     * @param PPFrame $frame
-     * @param array $magicArgs
-     * @param array $values
+     * @param Parser $parser The parser in use.
+     * @param PPFrame $frame The template frame in use.
+     * @param array $magicArgs The template arguments that contain a recognized keyword for the function in string key/PPNode value format.
+     * @param string $templateName The name of the template.
+     * @param int $nargs The number of arguments to split parameters into.
+     * @param array $named All named arguments not covered by $magicArgs. These will be passed to each template call.
+     * @param array $values All numbered/anonymous arguments.
      *
-     * @return [type]
+     * @return string The text of all the function calls.
      *
      */
-    private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $magicArgs, $templateName, $nargs, array $named, array $values)
-    {
+    private static function splitArgsCommon(
+        Parser $parser,
+        PPFrame $frame,
+        array $magicArgs,
+        string $templateName,
+        int $nargs,
+        array $named,
+        array $values
+    ): string {
         if ($nargs < 1 || empty($templateName)) {
             return '';
         }
 
-        $allowEmpty = ParserHelper::getInstance()->arrayGet($magicArgs, ParserHelper::NA_ALLOWEMPTY, false);
+        $allowEmpty = $magicArgs[ParserHelper::NA_ALLOWEMPTY] ?? false;
         $templates = self::getTemplates($frame, $templateName, $nargs, $values, $named, $allowEmpty);
         if (empty($templates)) {
             return '';
         }
 
         // show("Templates:\n", $templates);
-        $separator = ParserHelper::getInstance()->getSeparator($frame, $magicArgs);
+        $separator = ParserHelper::getInstance()->getSeparator($magicArgs);
         $output = implode($separator, $templates);
         // show("Output:\n", $output);
 
@@ -1163,11 +1162,11 @@ class Riven
      * Splits named arguments from unnamed.
      *
      * @param PPFrame $frame The template frame in use.
-     * @param array|null $args The arguments to split.
+     * @param ?array $args The arguments to split.
      *
-     * @return array
+     * @return array An array of arrays, the first element being the named values and the second element being the anonymous values.
      */
-    private static function splitNamedArgs(PPFrame $frame, array $args = null)
+    private static function splitNamedArgs(PPFrame $frame, ?array $args = null): array
     {
         $named = [];
         $unnamed = [];
@@ -1193,9 +1192,9 @@ class Riven
      * @param PPFrame $frame The template frame in use.
      * @param PPNode $node The node to work on.
      *
-     * @return string
+     * @return string The resulting text after all links have been trimmed.
      */
-    private static function trimLinksParseNode(Parser $parser, PPFrame $frame, PPNode $node)
+    private static function trimLinksParseNode(Parser $parser, PPFrame $frame, PPNode $node): string
     {
         if (self::isLink($node)) {
             // show($node->value);
@@ -1239,8 +1238,8 @@ class Riven
             return $node->value;
         } elseif ($node instanceof PPNode_Hash_Attr) {
             return $frame->expand($node);
-        } else {
-            return $frame->expand($node);
         }
+
+        return $frame->expand($node);
     }
 }

@@ -1,12 +1,12 @@
 <?php
 class TableCell
 {
-    private $attribs = '';
-    private $colspan = 1;
-    private $content = '';
-    private $isHeader = false;
-    private $rowspan = 1;
-    private $rowspanModified = false;
+    private $attribs;
+    private $colspan;
+    private $content;
+    private $getIsHeader;
+    private $rowspan;
+    private $rowspanModified;
 
     private static $colSpanRegex = '#\bcolspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
     private static $rowSpanRegex = '#\browspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
@@ -18,33 +18,76 @@ class TableCell
      */
     private $parent;
 
-    public function __construct($cell)
+    /**
+     * Creates a new instance of a TableCell.
+     *
+     * @param string $attribs Cell attributes.
+     * @param bool $getIsHeader Whether the cell a header.
+     * @param ?TableCell $parent The parent cell for cells that span multiple rows or columns.
+     * @param int $colspan How many columns the cell spans.
+     * @param int $rowspan How many rows the cell spans.
+     *
+     */
+    private function __construct(string $attribs, bool $getIsHeader, ?TableCell $parent, int $colspan, int $rowspan = 1)
     {
-        if ($cell) {
-            if ($cell instanceof TableCell) {
-                // We don't do rowspan here as alterations to rowspan should be synchronized with the parent.
-                $this->attribs = $cell->attribs;
-                $this->colspan = $cell->colspan;
-                $this->isHeader = $cell->isHeader;
-                $this->parent = $cell;
-            } else {
-                $this->attribs = trim($cell['attribs']);
-                $this->content = $cell['content'];
-                $this->isHeader = $cell['name'] === 'th';
-                preg_match(self::$colSpanRegex, $this->attribs, $colspan);
-                if ($colspan) {
-                    $this->colspan = $colspan['span'];
-                }
-
-                preg_match(self::$rowSpanRegex, $this->attribs, $rowspan);
-                if ($rowspan) {
-                    $this->rowspan = $rowspan['span'];
-                }
-            }
-        }
+        $this->attribs = $attribs;
+        $this->getIsHeader = $getIsHeader;
+        $this->parent = $parent;
+        $this->colspan = $colspan;
+        $this->rowspan = $rowspan;
     }
 
-    public function decrementRowspan()
+    /**
+     * Creates a new instance of a TableCell from a Regex match with named groups.
+     *
+     * @param array $match
+     *
+     * @return TableCell|null
+     *
+     */
+    public static function FromMatch(array $match): ?TableCell
+    {
+        if (!isset($match)) {
+            return null;
+        }
+
+        $attribs = trim($match['attribs']);
+        preg_match(self::$colSpanRegex, $attribs, $colspan);
+        if ($colspan) {
+            $colspan = $colspan['span'];
+        }
+
+        preg_match(self::$rowSpanRegex, $attribs, $rowspan);
+        if ($rowspan) {
+            $rowspan = $rowspan['span'];
+        }
+
+        return new TableCell($attribs, $match['name'] === 'th', $match['content'], $colspan, $rowspan);
+    }
+
+    /**
+     * Creates a TableCell that points to its parent cell for column/row spans.
+     *
+     * @param TableCell $parent
+     *
+     * @return ?TableCell
+     *
+     */
+    public static function SpanChild(TableCell $parent): ?TableCell
+    {
+        // We don't do rowspan here as alterations to rowspan should be synchronized with the parent.
+        return isset($parent)
+            ? new TableCell($parent->attribs, $parent->getIsHeader, $parent, $parent->colspan)
+            : null;
+    }
+
+    /**
+     * Reduces the parent rowspan by one or, if there's no parent, the current rowspan.
+     *
+     * @return void
+     *
+     */
+    public function decrementRowspan(): void
     {
         // Because of the possibility of repeated updates, the rowspan value is altered on its own and the attributes
         // updated only when actually called for.
@@ -56,7 +99,13 @@ class TableCell
         }
     }
 
-    public function getAttributes()
+    /**
+     * Gets the attrib property as found in the <td/th attribs=whatever> portion of the table cell tag.
+     *
+     * @return string
+     *
+     */
+    public function getAttributes(): string
     {
         if ($this->parent) {
             return $this->parent->getAttributes();
@@ -66,40 +115,76 @@ class TableCell
         return $this->attribs;
     }
 
-    public function getColspan()
+    /**
+     * Gets the colspan property (<td colspan=#>)
+     *
+     * @return int
+     *
+     */
+    public function getColspan(): int
     {
         return $this->colspan;
     }
 
-    public function getContent()
+    /**
+     * Gets the content property (<td>content</td>).
+     *
+     * @return string
+     *
+     */
+    public function getContent(): string
     {
         return $this->content;
     }
 
-    public function getParent()
+    /**
+     * Gets the parent TableCell for a colspan or rowspan.
+     *
+     * @return ?TableCell
+     *
+     */
+    public function getParent(): ?TableCell
     {
         return $this->parent;
     }
 
-    public function getRowspan()
+    /**
+     * Gets the rowspan property (<td rowspan=#>).
+     *
+     * @return int
+     *
+     */
+    public function getRowspan(): int
     {
         $obj = $this->parent ? $this->parent : $this;
         return $obj->rowspan;
     }
 
-    public function isHeader()
+    /**
+     * Gets whether the cell is a header (<th>) or a regular cell (<td>).
+     *
+     * @return bool
+     *
+     */
+    public function getIsHeader(): bool
     {
-        return $this->isHeader;
+        return $this->getIsHeader;
     }
 
-    public function toHtml()
+    /**
+     * Serializes the TableCell to HTML.
+     *
+     * @return string
+     *
+     */
+    public function toHtml(): string
     {
         if ($this->parent) {
             return '';
         }
 
         $this->updateRowSpan();
-        $name = $this->isHeader ? 'th' : 'td';
+        $name = $this->getIsHeader ? 'th' : 'td';
         $attribs = trim($this->attribs);
         if (strlen($attribs) > 0) {
             $attribs = ' ' . $attribs;
@@ -109,7 +194,13 @@ class TableCell
         return "<$name$attribs>$content</$name>";
     }
 
-    private function updateRowSpan()
+    /**
+     * Updates the rowspan portion of the attribs based on the current rowspan property.
+     *
+     * @return void
+     *
+     */
+    private function updateRowSpan(): void
     {
         if ($this->rowspanModified) {
             $this->attribs = preg_replace(self::$rowSpanRegex, $this->rowspan === 1 ? '' : "rowspan=$this->rowspan", $this->attribs);

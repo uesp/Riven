@@ -27,7 +27,7 @@ class RivenHooks /* implements
 	 * @return void
 	 *
 	 */
-	public static function onMagicWordwgVariableIDs(array &$aCustomVariableIds)
+	public static function onMagicWordwgVariableIDs(array &$aCustomVariableIds): void
 	{
 		$aCustomVariableIds[] = Riven::VR_SKINNAME;
 	}
@@ -40,7 +40,7 @@ class RivenHooks /* implements
 	 * @return void
 	 *
 	 */
-	public static function onParserFirstCallInit(Parser $parser)
+	public static function onParserFirstCallInit(Parser $parser): void
 	{
 		self::initParserFunctions($parser);
 		self::initTagFunctions($parser);
@@ -56,10 +56,10 @@ class RivenHooks /* implements
 	 * @param mixed $ret Return value.
 	 * @param PPFrame $frame The frame in use.
 	 *
-	 * @return bool
+	 * @return bool Always true, per Wikipedia documentation.
 	 *
 	 */
-	public static function onParserGetVariableValueSwitch(Parser $parser, array &$variableCache, $magicWordId, &$ret, PPFrame $frame)
+	public static function onParserGetVariableValueSwitch(Parser $parser, array &$variableCache, $magicWordId, &$ret, PPFrame $frame): bool
 	{
 		switch ($magicWordId) {
 			case Riven::VR_SKINNAME:
@@ -82,7 +82,7 @@ class RivenHooks /* implements
 	 * @return void
 	 *
 	 */
-	private static function initParserFunctions(Parser $parser)
+	private static function initParserFunctions(Parser $parser): void
 	{
 		$parser->setFunctionHook(Riven::PF_ARG, 'Riven::doArg', SFH_OBJECT_ARGS);
 		$parser->setFunctionHook(Riven::PF_EXPLODEARGS, 'Riven::doExplodeargs', SFH_OBJECT_ARGS);
@@ -103,7 +103,7 @@ class RivenHooks /* implements
 	 * @return void
 	 *
 	 */
-	private static function initTagFunctions(Parser $parser)
+	private static function initTagFunctions(Parser $parser): void
 	{
 		foreach (self::$tagInfo as $key => $value) {
 			ParserHelper::getInstance()->setHookSynonyms($parser, $key, $value);
