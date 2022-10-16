@@ -78,6 +78,8 @@ class Riven
      *
      * @param string $text The text to clean.
      * @param array $args The tag arguments:
+     *     debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show even
+     *            when saved.
      *     mode:  Select strategy for removal. Note that in the first two modes, this is an intelligent search and will
      *            only match what the wiki identifies as links and templates.
      *         top:       Only remove space at the top-most level...will not search inside links or templates (but can
@@ -85,8 +87,6 @@ class Riven
      *         recursive: (disabled for now) Search everything.
      *         original:  This is the default, using The original regex-based search. This can sometimes result in
      *                    unwanted matches.
-     *     debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show even
-     *            when saved.
      * @param Parser $parser The parser in use.
      * @param PPFrame $frame The template frame in use.
      *
@@ -143,9 +143,10 @@ class Riven
      *
      * @param string $text The text containing the tables to clean.
      * @param array $args The tag arguments:
-     *     protectrows: The number of rows at the top of the table that will not be removed no matter what.
-     *     debug:       Set to PHP true to show the cleaned table code on-screen during Show Preview. Set to 'always'
+     *     cleanimages: Whether to remove image-only cells or count them as content.
+     *           debug: Set to PHP true to show the cleaned table code on-screen during Show Preview. Set to 'always'
      *                  to show even when saved.
+     *     protectrows: The number of rows at the top of the table that will not be removed no matter what.
      * @param Parser $parser The parser in use.
      * @param PPFrame $frame The templare frame in use.
      *
@@ -199,7 +200,18 @@ class Riven
      * @param Parser $parser The parser in use.
      * @param PPFrame $frame The template frame in use.
      * @param array $args Function arguments:
-     *
+     *              1: The template to call.
+     *              2: The number of parameters to split on.
+     *              3: The text to split.
+     *              4: (Optional) The delimiter. If specified, this overrides the named version of
+     *                 delimiter.
+     *     allowempty: If set to true, will display empty entries along with separators.
+     *          debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show
+     *                 even when saved.
+     *      delimiter: The character(s) that separate one value from the next in the input text. Defaults to a comma.
+     *             if: A condition that must be true in order for this function to run.
+     *          ifnot: A condition that must be false in order for this function to run.
+     *      separator: The character(s) to display between each value in the output text. Defaults to an empty string.
      *
      * @return string The list of functions to call as a reuslt of the split.
      *
@@ -236,8 +248,8 @@ class Riven
             return '';
         }
 
-        $nargs = intval($frame->expand($values[1]));
         $templateName = $frame->expand($values[0]);
+        $nargs = intval($frame->expand($values[1]));
         $delimiter = $frame->expand(
             isset($values[3])
                 ? $values[3]
@@ -256,9 +268,10 @@ class Riven
      * @param Parser $parser The parser in use.
      * @param PPFrame $frame The template frame in use.
      * @param array $args Function arguments:
-     *       1-n: All unnamed parameters are page names to search.
+     *        1+: All unnamed parameters are page names to search.
      *        if: A condition that must be true in order for this function to run.
      *     ifnot: A condition that must be false in order for this function to run.
+     *
      * @return string The first title that exists.
      *
      */
@@ -347,6 +360,7 @@ class Riven
      * @param Parser $parser The parser in use.
      * @param PPFrame $frame The template frame in use.
      * @param array $args Function arguments:
+     *        1+: The names of the templates to include.
      *     debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show even
      *            when saved.
      *        if: A condition that must be true in order for this function to run.
@@ -392,10 +406,12 @@ class Riven
      * @param Parser $parser The parser in use.
      * @param PPFrame $frame The template frame in use.
      * @param array $args Function arguments:
-     *            if: A condition that must be true in order for this function to run.
-     *         ifnot: A condition that must be false in order for this function to run.
-     *          seed: The number to use to initialize the random sequence.
-     *     separator: The separator to use between entries. Defaults to \n.
+     *             1+: The values to pick from.
+     *     allowempty: If set to true, will display empty entries along with separators.
+     *             if: A condition that must be true in order for this function to run.
+     *          ifnot: A condition that must be false in order for this function to run.
+     *           seed: The number to use to initialize the random sequence.
+     *      separator: The separator to use between entries. Defaults to \n.
      *
      * @return string The randomized result.
      *
@@ -524,6 +540,17 @@ class Riven
      * @param Parser $parser The parser in use.
      * @param PPFrame $frame The template frame in use.
      * @param array $args Function arguments:
+     *              1: The template to call.
+     *              2: The number of parameters to split on.
+     *             3+: (Parameter variant) The values to split.
+     *     allowempty: If set to true, will display empty entries along with separators.
+     *          debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show
+     *                 even when saved.
+     *      delimiter: The character(s) that separate one value from the next in the input text. Defaults to a comma.
+     *        explode: The text to explode when using that version of this function.
+     *             if: A condition that must be true in order for this function to run.
+     *          ifnot: A condition that must be false in order for this function to run.
+     *      separator: The character(s) to display between each value in the output text. Defaults to an empty string.
      *
      * @return string The text of all function calls after splitting.
      */
@@ -1028,7 +1055,7 @@ class Riven
      * @return bool
      *
      */
-    private static function isTrimmable(PPNode $node = null): bool
+    private static function isTrimmable(?PPNode $node = null): bool
     {
         // Is it a template?
         if ($node instanceof PPTemplateFrame_Hash) {
@@ -1089,7 +1116,7 @@ class Riven
      * @return string The cleaned results.
      *
      */
-    private static function parseTable(Parser $parser, $input, &$offset, int $protectRows, bool $cleanImages, ?string $open = null)
+    private static function parseTable(Parser $parser, $input, int &$offset, int $protectRows, bool $cleanImages, ?string $open = null)
     {
         // RHshow("Parse Table In:\n", substr($input, $offset));
         $output = '';
