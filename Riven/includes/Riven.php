@@ -93,7 +93,7 @@ class Riven
      * @return string Cleaned text.
      *
      */
-    public static function doCleanSpace(string $text, array $args, Parser $parser, PPFrame $frame): string
+    public static function doCleanSpace(string $text, array $args, Parser $parser, PPFrame $frame)
     {
         // Definitely don't want every page with a cleanspace being dynamic. Was this necessary or just inserted for testing and missed in cleanup?
         // $parser->getOutput()->updateCacheExpiry(0);
@@ -124,7 +124,7 @@ class Riven
         }
 
         // Categories and trails are stripped on ''any'' template page, not just when directly calling the template
-        // (but not in pre view mode).
+        // (but not in preview mode).
         if ($parser->getTitle()->getNamespace() === NS_TEMPLATE) {
             // save categories before processing
             $precats = $parser->getOutput()->getCategories();
@@ -153,7 +153,7 @@ class Riven
      * @return string Cleaned text.
      *
      */
-    public static function doCleanTable(string $text, array $args, Parser $parser, PPFrame $frame): string
+    public static function doCleanTable(string $text, array $args, Parser $parser, PPFrame $frame): array
     {
         // RHshow("doCleanTable wiki text:\n", $text);
 
@@ -554,9 +554,9 @@ class Riven
      *
      * @return string The text of all function calls after splitting.
      */
-    public static function doSplitArgs(Parser $parser, PPFrame $frame, array $args): string
+    public static function doSplitArgs(Parser $parser, PPFrame $frame, array $args)
     {
-        $input = ParserHelper::getInstance()->getMagicArgs(
+        list($magicArgs, $values, $dupes) = ParserHelper::getInstance()->getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_ALLOWEMPTY,
@@ -573,7 +573,6 @@ class Riven
          * @var array $values
          * @var array $dupes
          */
-        list($magicArgs, $values, $dupes) = $input;
         if (!ParserHelper::getInstance()->checkIfs($frame, $magicArgs)) {
             return '';
         }
@@ -593,19 +592,19 @@ class Riven
         $nargs = intval($frame->expand($values[1]));
         if (isset($magicArgs[self::NA_EXPLODE])) {
             // Explode
-            $explode = $magicArgs[self::NA_EXPLODE];
-            $delimiter = $magicArgs[self::NA_DELIMITER] ?? ',';
-            $values = explode($delimiter, $explode);
+            $values = explode($magicArgs[self::NA_DELIMITER] ?? ',', $magicArgs[self::NA_EXPLODE]);
         } else {
-            $newValues = array_slice($values, 2);
-            if (count($newValues) == 0) {
-                $newValues = $frame->getNumberedArguments();
+            $values = array_slice($values, 2);
+            if (count($values) == 0) {
+                $values = array_values($frame->getNumberedArguments());
             }
 
+            /*
             $values = [];
             foreach ($newValues as $value) {
-                $values[] = str_replace('|', '{{!}}', trim($frame->expand($value)));
+                $values[] = trim($frame->expand($value));
             }
+            */
         }
 
         return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, array_merge($named, $dupes), $values);
@@ -756,6 +755,7 @@ class Riven
             /** @var TableCell[] $spans */
             $spans = [];
 
+            /** @var TableCell $cell */
             foreach ($row->cells as $cell) {
                 // RHshow($cell);
                 $content = trim(html_entity_decode($cell->getContent()));
@@ -984,16 +984,15 @@ class Riven
      */
     private static function getTemplates(PPFrame $frame, string $templateName, int $nargs, array $values, array $named, bool $allowEmpty): array
     {
-        $nargs = intval($nargs);
         if (!$nargs) {
             $nargs = count($values);
         }
 
-        $templates = [];
         if (count($values) == 0) {
-            return $templates;
+            return [];
         }
 
+        $templates = [];
         $namedParameters = '';
         foreach ($named as $name => $value) {
             $value = $frame->expand($value);
@@ -1001,17 +1000,20 @@ class Riven
         }
 
         $templates = [];
+        if (!is_array($values)) {
+            $values = [trim($values)];
+        }
+
         for ($index = 0; $index < count($values); $index += $nargs) {
             $numberedParameters = '';
             $blank = true;
             for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
-                if (!is_array($values)) {
-                    // show('Yes, this is a thing!');
-                    $values = [trim($values)];
-                }
-
-                $value = $values[$index + $paramNum];
+                $value = $values[$index + $paramNum] ?? null;
                 if (!is_null($value)) {
+                    if ($value instanceof  PPNode) {
+                        $value = $frame->expand($value, PPFrame::NO_TEMPLATES | PPFrame::NO_TAGS);
+                    }
+
                     if (strlen($value) > 0) {
                         $blank = false;
                     }
@@ -1092,7 +1094,6 @@ class Riven
                 // RHshow($cell);
                 // Conditional is to avoid unwanted blank lines in output.
                 $html = $cell->toHtml();
-                // RHshow($html);
                 if ($html) {
                     $output .= $html . "\n";
                 }
@@ -1155,18 +1156,11 @@ class Riven
      * @param array $named All named arguments not covered by $magicArgs. These will be passed to each template call.
      * @param array $values All numbered/anonymous arguments.
      *
-     * @return string The text of all the function calls.
+     * @return mixed The text of all the function calls.
      *
      */
-    private static function splitArgsCommon(
-        Parser $parser,
-        PPFrame $frame,
-        array $magicArgs,
-        string $templateName,
-        int $nargs,
-        array $named,
-        array $values
-    ): string {
+    private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $magicArgs, string $templateName, int $nargs, array $named, array $values)
+    {
         if ($nargs < 1 || empty($templateName)) {
             return '';
         }
@@ -1178,11 +1172,14 @@ class Riven
         }
 
         // show("Templates:\n", $templates);
-        $separator = ParserHelper::getInstance()->getSeparator($magicArgs);
+        $helper = ParserHelper::getInstance();
+        $separator = $helper->getSeparator($magicArgs);
         $output = implode($separator, $templates);
         // show("Output:\n", $output);
 
-        return ParserHelper::getInstance()->formatPFForDebug($output, ParserHelper::getInstance()->checkDebugMagic($parser, $frame, $magicArgs));
+        $debug = $helper->checkDebugMagic($parser, $frame, $magicArgs);
+        $output = $helper->formatPFForDebug($output, $debug);
+        return ['text' => $output, 'noparse' => false];
     }
 
     /**

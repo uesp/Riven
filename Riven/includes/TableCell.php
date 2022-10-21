@@ -4,34 +4,35 @@ class TableCell
     private $attribs;
     private $colspan;
     private $content;
-    private $getIsHeader;
-    private $rowspan;
-    private $rowspanModified;
-
-    private static $colSpanRegex = '#\bcolspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
-    private static $rowSpanRegex = '#\browspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
-
+    private $isHeader;
     /**
      * $parent
      *
      * @var self
      */
     private $parent;
+    private $rowspan;
+    private $rowspanModified;
+
+    private static $colSpanRegex = '#\bcolspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
+    private static $rowSpanRegex = '#\browspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
+
 
     /**
      * Creates a new instance of a TableCell.
      *
      * @param string $attribs Cell attributes.
-     * @param bool $getIsHeader Whether the cell a header.
+     * @param bool $isHeader Whether the cell a header.
      * @param ?TableCell $parent The parent cell for cells that span multiple rows or columns.
      * @param int $colspan How many columns the cell spans.
      * @param int $rowspan How many rows the cell spans.
      *
      */
-    private function __construct(string $attribs, bool $getIsHeader, ?TableCell $parent, int $colspan, int $rowspan = 1)
+    private function __construct(?string $content, string $attribs, bool $isHeader, ?TableCell $parent, int $colspan, int $rowspan)
     {
         $this->attribs = $attribs;
-        $this->getIsHeader = $getIsHeader;
+        $this->content = $content;
+        $this->isHeader = $isHeader;
         $this->parent = $parent;
         $this->colspan = $colspan;
         $this->rowspan = $rowspan;
@@ -42,7 +43,7 @@ class TableCell
      *
      * @param array $match
      *
-     * @return TableCell|null
+     * @return ?TableCell
      *
      */
     public static function FromMatch(array $match): ?TableCell
@@ -53,16 +54,11 @@ class TableCell
 
         $attribs = trim($match['attribs']);
         preg_match(self::$colSpanRegex, $attribs, $colspan);
-        if ($colspan) {
-            $colspan = $colspan['span'];
-        }
-
+        $colspan = $colspan ? intval($colspan['span']) : 1;
         preg_match(self::$rowSpanRegex, $attribs, $rowspan);
-        if ($rowspan) {
-            $rowspan = $rowspan['span'];
-        }
+        $rowspan = $rowspan ? intval($rowspan['span']) : 1;
 
-        return new TableCell($attribs, $match['name'] === 'th', $match['content'], $colspan, $rowspan);
+        return new TableCell($match['content'], $attribs, $match['name'] === 'th', null, $colspan, $rowspan);
     }
 
     /**
@@ -75,9 +71,8 @@ class TableCell
      */
     public static function SpanChild(TableCell $parent): ?TableCell
     {
-        // We don't do rowspan here as alterations to rowspan should be synchronized with the parent.
         return isset($parent)
-            ? new TableCell($parent->attribs, $parent->getIsHeader, $parent, $parent->colspan)
+            ? new TableCell('', $parent->attribs, $parent->isHeader, $parent, 0, 0)
             : null;
     }
 
@@ -100,22 +95,6 @@ class TableCell
     }
 
     /**
-     * Gets the attrib property as found in the <td/th attribs=whatever> portion of the table cell tag.
-     *
-     * @return string
-     *
-     */
-    public function getAttributes(): string
-    {
-        if ($this->parent) {
-            return $this->parent->getAttributes();
-        }
-
-        $this->updateRowspan();
-        return $this->attribs;
-    }
-
-    /**
      * Gets the colspan property (<td colspan=#>)
      *
      * @return int
@@ -135,6 +114,17 @@ class TableCell
     public function getContent(): string
     {
         return $this->content;
+    }
+
+    /**
+     * Gets whether the cell is a header (<th>) or a regular cell (<td>).
+     *
+     * @return bool
+     *
+     */
+    public function getIsHeader(): bool
+    {
+        return $this->isHeader;
     }
 
     /**
@@ -161,17 +151,6 @@ class TableCell
     }
 
     /**
-     * Gets whether the cell is a header (<th>) or a regular cell (<td>).
-     *
-     * @return bool
-     *
-     */
-    public function getIsHeader(): bool
-    {
-        return $this->getIsHeader;
-    }
-
-    /**
      * Serializes the TableCell to HTML.
      *
      * @return string
@@ -184,14 +163,9 @@ class TableCell
         }
 
         $this->updateRowSpan();
-        $name = $this->getIsHeader ? 'th' : 'td';
-        $attribs = trim($this->attribs);
-        if (strlen($attribs) > 0) {
-            $attribs = ' ' . $attribs;
-        }
-
-        $content = $this->content;
-        return "<$name$attribs>$content</$name>";
+        $name = $this->isHeader ? 'th' : 'td';
+        $attribs = strlen($this->attribs) > 0 ? ' ' . $this->attribs : '';
+        return "<$name$attribs>$this->content</$name>";
     }
 
     /**
