@@ -218,12 +218,13 @@ class Riven
      */
     public static function doExplodeArgs(Parser $parser, PPFrame $frame, array $args)
     {
+        $helper = ParserHelper::getInstance();
         /**
          * @var array $magicArgs
          * @var array $values
          * @var array $dupes
          */
-        list($magicArgs, $values, $dupes) = ParserHelper::getInstance()->getMagicArgs(
+        list($magicArgs, $values, $dupes) = $helper->getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_ALLOWEMPTY,
@@ -234,7 +235,7 @@ class Riven
             self::NA_DELIMITER
         );
 
-        if (!ParserHelper::getInstance()->checkIfs($frame, $magicArgs)) {
+        if (!$helper->checkIfs($frame, $magicArgs)) {
             return '';
         }
 
@@ -243,7 +244,7 @@ class Riven
          * @var array $named
          * @var array $values
          */
-        list($named, $values) = ParserHelper::splitNamedArgs($frame, $values);
+        list($named, $values) = $helper->splitNamedArgs($frame, $values);
         if (count($values) < 3 || !isset($values[1])) {
             return '';
         }
@@ -576,7 +577,7 @@ class Riven
         }
 
         // show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
-        list($named, $values) = ParserHelper::splitNamedArgs($frame, $values);
+        list($named, $values) = ParserHelper::getInstance()->splitNamedArgs($frame, $values);
         if (!isset($values[1])) {
             return '';
         }
