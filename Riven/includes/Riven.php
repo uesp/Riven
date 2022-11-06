@@ -243,7 +243,7 @@ class Riven
          * @var array $named
          * @var array $values
          */
-        list($named, $values) = self::splitNamedArgs($frame, $values);
+        list($named, $values) = ParserHelper::splitNamedArgs($frame, $values);
         if (count($values) < 3 || !isset($values[1])) {
             return '';
         }
@@ -349,8 +349,10 @@ class Riven
 
         $titleText = trim($frame->expand($values[0] ?? ''));
         $result = self::existsCommon($parser, Title::newFromText($titleText)) ? 1 : 2;
-        $result = $values[$result];
-        return is_null($result) ? '' : trim($frame->expand($result));
+        $result = $values[$result] ?? null;
+        $result = is_null($result) ? '' : trim($frame->expand($result));
+        // RHshow('#ifexistx result: ', $result);
+        return $result;
     }
 
     /**
@@ -447,17 +449,13 @@ class Riven
         }
 
         $parser->getOutput()->updateCacheExpiry(0);
-
-        // Shuffle uses the basic randomizer, so we seed with srand if requested.
-        // As of PHP 7.1.0, shuffle uses the mt randomizer, but srand is then aliased to mt_srand, so no urgent need to
-        // change it.
-        $seed = $magicArgs[self::NA_SEED];
+        $seed = $magicArgs[self::NA_SEED] ?? null;
         if (is_null($seed)) {
             // We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based
-            // seed will cause all subsequent calls to srand to only generate hourly results).
-            srand();
+            // seed will cause all subsequent parameterless calls to mt_srand() to only generate hourly results).
+            mt_srand();
         } else {
-            srand($seed);
+            mt_srand($seed);
         }
 
         shuffle($values); // randomize list
@@ -578,7 +576,7 @@ class Riven
         }
 
         // show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
-        list($named, $values) = self::splitNamedArgs($frame, $values);
+        list($named, $values) = ParserHelper::splitNamedArgs($frame, $values);
         if (!isset($values[1])) {
             return '';
         }
@@ -619,9 +617,9 @@ class Riven
      *     mode: The only option currently is "smart", which uses the preprocessor to parse the code with near-perfect
      *           results.
      *
-     * @return string The resulting text after having links stripped.
+     * @return string|array The resulting text after having links stripped.
      */
-    public static function doTrimLinks(Parser $parser, PPFrame $frame, array $args): string
+    public static function doTrimLinks(Parser $parser, PPFrame $frame, array $args)
     {
         if (!isset($args[0])) {
             return '';
@@ -633,11 +631,11 @@ class Riven
             self::NA_MODE
         );
 
-        $ph = ParserHelper::getInstance();
-        if (!$ph->magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
+        $helper = ParserHelper::getInstance();
+        if (!$helper->magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
             $output = $parser->recursiveTagParse($args[0]);
             $output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
-            $output = $ph->replaceLinkHoldersText($parser, $output);
+            $output = $helper->replaceLinkHoldersText($parser, $output);
             return $output;
         }
 
@@ -649,8 +647,8 @@ class Riven
         $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
         $rootNode = $preprocessor->preprocessToObj($args[0], $flag);
         $output = self::trimLinksParseNode($parser, $frame, $rootNode);
-        $output = $ph->getStripState($parser)->unstripBoth($output);
-        $output = $ph->replaceLinkHoldersText($parser, $output);
+        $output = $helper->getStripState($parser)->unstripBoth($output);
+        $output = $helper->replaceLinkHoldersText($parser, $output);
         $newNode = $preprocessor->preprocessToObj($output, $flag);
         $output = $frame->expand($newNode);
         return [$output, 'noparse' => true];
@@ -1180,33 +1178,6 @@ class Riven
         $debug = $helper->checkDebugMagic($parser, $frame, $magicArgs);
         $output = $helper->formatPFForDebug($output, $debug);
         return ['text' => $output, 'noparse' => false];
-    }
-
-    /**
-     * Splits named arguments from unnamed.
-     *
-     * @param PPFrame $frame The template frame in use.
-     * @param ?array $args The arguments to split.
-     *
-     * @return array An array of arrays, the first element being the named values and the second element being the anonymous values.
-     */
-    private static function splitNamedArgs(PPFrame $frame, ?array $args = null): array
-    {
-        $named = [];
-        $unnamed = [];
-        if (!is_null($args)) {
-            // $unnamed[] = $args[0];
-            for ($i = 0; $i < count($args); $i++) {
-                list($name, $value) = ParserHelper::getInstance()->getKeyValue($frame, $args[$i]);
-                if (is_null($name)) {
-                    $unnamed[] = $value;
-                } else {
-                    $named[(string)$name] = $value;
-                }
-            }
-        }
-
-        return [$named, $unnamed];
     }
 
     /**
