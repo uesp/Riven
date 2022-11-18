@@ -13,12 +13,6 @@ use MediaWiki\MediaWikiServices;
 class RivenHooks /* implements
 	\MediaWiki\Hook\ParserFirstCallInitHook */
 {
-	/** Tag hooks. To disable a tag, comment the line out. */
-	private static $tagInfo = [
-		Riven::TG_CLEANSPACE => 'Riven::doCleanSpace',
-		Riven::TG_CLEANTABLE => 'Riven::doCleanTable'
-	];
-
 	/**
 	 * Register variables.
 	 *
@@ -105,8 +99,7 @@ class RivenHooks /* implements
 	 */
 	private static function initTagFunctions(Parser $parser): void
 	{
-		foreach (self::$tagInfo as $key => $value) {
-			ParserHelper::getInstance()->setHookSynonyms($parser, $key, $value);
-		}
+		ParserHelper::getInstance()->setHookSynonyms($parser, Riven::TG_CLEANSPACE, 'Riven::doCleanSpace');
+		ParserHelper::getInstance()->setHookSynonyms($parser, Riven::TG_CLEANTABLE, 'Riven::doCleanTable');
 	}
 }

@@ -93,15 +93,15 @@ class Riven
      * @return string Cleaned text.
      *
      */
-    public static function doCleanSpace(string $text, array $args, Parser $parser, PPFrame $frame)
+    public static function doCleanSpace(string $content, array $attributes, Parser $parser, PPFrame $frame)
     {
         $helper = ParserHelper::getInstance();
         // Definitely don't want every page with a cleanspace being dynamic. Was this necessary or just inserted for testing and missed in cleanup?
         // $parser->getOutput()->updateCacheExpiry(0);
-        $args = $helper->transformArgs($args);
+        $args = $helper->transformAttributes($attributes);
         $mode = $args[self::NA_MODE] ?? self::AV_ORIGINAL;
         $modeWord = $helper->findMagicID($mode, self::AV_ORIGINAL);
-        $output = $text;
+        $output = $content;
         if ($modeWord !== self::AV_ORIGINAL) {
             $output = preg_replace('#<!--.*?-->#s', '', $output);
         }
@@ -154,7 +154,7 @@ class Riven
      * @return string Cleaned text.
      *
      */
-    public static function doCleanTable(string $text, array $args, Parser $parser, PPFrame $frame): array
+    public static function doCleanTable(string $content, array $attributes, Parser $parser, PPFrame $frame): array
     {
         // RHshow("doCleanTable wiki text:\n", $text);
 
@@ -165,22 +165,22 @@ class Riven
             $parser->getTitle()->getNamespace() == NS_TEMPLATE &&
             !$parser->getOptions()->getIsPreview()
         ) {
-            return $text;
+            return $content;
         }
 
-        // RHshow('Pre-args: ', $args);
+        // RHshow('Pre-transform: ', $attributes);
         $helper = ParserHelper::getInstance();
-        $args = $helper->transformArgs($args);
-        // RHshow('Post Args: ', $args);
-        $text = $parser->recursiveTagParse($text, $frame);
-        // RHshow("Tag Parsed:\n", $text);
+        $attributes = $helper->transformAttributes($attributes);
+        // RHshow('Post-transform: ', $attributes);
+        $text = $parser->recursiveTagParse($content, $frame);
+        // RHshow("Tag Parsed:\n", $content);
 
         $text = $helper->getStripState($parser)->unstripNoWiki($text);
         $offset = 0;
         $output = '';
         $lastVal = null;
-        $protectRows = intval($args[self::NA_PROTROWS] ?? 1);
-        $cleanImages = intval($args[self::NA_CLEANIMG] ?? 1);
+        $protectRows = intval($attributes[self::NA_PROTROWS] ?? 1);
+        $cleanImages = intval($attributes[self::NA_CLEANIMG] ?? 1);
         do {
             $lastVal = self::parseTable($parser, $text, $offset, $protectRows, $cleanImages);
             $output .= $lastVal;
@@ -190,7 +190,7 @@ class Riven
         $after = substr($text, $offset);
         $output .= $after;
 
-        $debug = $helper->checkDebugMagic($parser, $frame, $args);
+        $debug = $helper->checkDebugMagic($parser, $frame, $attributes);
         return $debug
             ? ['<pre>' . htmlspecialchars($output) . '</pre>', 'markerType' => 'nowiki']
             : [$output, 'preprocessFlags' => PPFrame::RECOVER_ORIG];
