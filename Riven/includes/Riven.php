@@ -76,8 +76,8 @@ class Riven
     /**
      * Removes whitespace surrounding HTML tags, links and other parser functions.
      *
-     * @param string $text The text to clean.
-     * @param array $args The tag arguments:
+     * @param string $content The content to clean.
+     * @param array $attributes The tag attributes:
      *     debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show even
      *            when saved.
      *     mode:  Select strategy for removal. Note that in the first two modes, this is an intelligent search and will
@@ -142,8 +142,8 @@ class Riven
     /**
      * Cleans a table of all empty rows.
      *
-     * @param string $text The text containing the tables to clean.
-     * @param array $args The tag arguments:
+     * @param string $content The text containing the tables to clean.
+     * @param array $attributes The tag attributes:
      *     cleanimages: Whether to remove image-only cells or count them as content.
      *           debug: Set to PHP true to show the cleaned table code on-screen during Show Preview. Set to 'always'
      *                  to show even when saved.
