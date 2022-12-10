@@ -11,6 +11,9 @@ use MediaWiki\MediaWikiServices;
  * non-preprocessor alternatives).
  *
  * The rarely used functions are all put into "Riven-Pages Using <feature>" tracking categories.
+ *
+ * @todo Rework relevant function to go back to using the pre-processor now that we know it's sticking around for a
+ * while. This should be FAR faster than text-based methods.
  */
 class Riven
 {
@@ -96,8 +99,6 @@ class Riven
     public static function doCleanSpace(string $content, array $attributes, Parser $parser, PPFrame $frame)
     {
         $helper = ParserHelper::getInstance();
-        // Definitely don't want every page with a cleanspace being dynamic. Was this necessary or just inserted for testing and missed in cleanup?
-        // $parser->getOutput()->updateCacheExpiry(0);
         $args = $helper->transformAttributes($attributes);
         $mode = $args[self::NA_MODE] ?? self::AV_ORIGINAL;
         $modeWord = $helper->findMagicID($mode, self::AV_ORIGINAL);
