@@ -99,7 +99,7 @@ class RivenHooks /* implements
 	 */
 	private static function initTagFunctions(Parser $parser): void
 	{
-		ParserHelper::getInstance()->setHookSynonyms($parser, Riven::TG_CLEANSPACE, 'Riven::doCleanSpace');
-		ParserHelper::getInstance()->setHookSynonyms($parser, Riven::TG_CLEANTABLE, 'Riven::doCleanTable');
+		ParserHelper::setHookSynonyms($parser, Riven::TG_CLEANSPACE, 'Riven::doCleanSpace');
+		ParserHelper::setHookSynonyms($parser, Riven::TG_CLEANTABLE, 'Riven::doCleanTable');
 	}
 }

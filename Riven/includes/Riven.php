@@ -98,10 +98,9 @@ class Riven
      */
     public static function doCleanSpace(string $content, array $attributes, Parser $parser, PPFrame $frame)
     {
-        $helper = ParserHelper::getInstance();
-        $args = $helper->transformAttributes($attributes);
+        $args = ParserHelper::transformAttributes($attributes);
         $mode = $args[self::NA_MODE] ?? self::AV_ORIGINAL;
-        $modeWord = $helper->findMagicID($mode, self::AV_ORIGINAL);
+        $modeWord = ParserHelper::findMagicID($mode, self::AV_ORIGINAL);
         $output = $content;
         if ($modeWord !== self::AV_ORIGINAL) {
             $output = preg_replace('#<!--.*?-->#s', '', $output);
@@ -121,8 +120,8 @@ class Riven
                 break;
         }
 
-        if ($helper->checkDebugMagic($parser, $frame, $args)) {
-            return $helper->formatTagForDebug($output, true);
+        if (ParserHelper::checkDebugMagic($parser, $frame, $args)) {
+            return ParserHelper::formatTagForDebug($output, true);
         }
 
         // Categories and trails are stripped on ''any'' template page, not just when directly calling the template
@@ -170,13 +169,12 @@ class Riven
         }
 
         // RHshow('Pre-transform: ', $attributes);
-        $helper = ParserHelper::getInstance();
-        $attributes = $helper->transformAttributes($attributes);
+        $attributes = ParserHelper::transformAttributes($attributes);
         // RHshow('Post-transform: ', $attributes);
         $text = $parser->recursiveTagParse($content, $frame);
         // RHshow("Tag Parsed:\n", $content);
 
-        $text = $helper->getStripState($parser)->unstripNoWiki($text);
+        $text = VersionHelper::getInstance()->getStripState($parser)->unstripNoWiki($text);
         $offset = 0;
         $output = '';
         $lastVal = null;
@@ -187,11 +185,11 @@ class Riven
             $output .= $lastVal;
         } while ($lastVal);
 
-        $output = $helper->getStripState($parser)->unstripGeneral($output);
+        $output = VersionHelper::getInstance()->getStripState($parser)->unstripGeneral($output);
         $after = substr($text, $offset);
         $output .= $after;
 
-        $debug = $helper->checkDebugMagic($parser, $frame, $attributes);
+        $debug = ParserHelper::checkDebugMagic($parser, $frame, $attributes);
         return $debug
             ? ['<pre>' . htmlspecialchars($output) . '</pre>', 'markerType' => 'nowiki']
             : [$output, 'preprocessFlags' => PPFrame::RECOVER_ORIG];
@@ -221,13 +219,12 @@ class Riven
      */
     public static function doExplodeArgs(Parser $parser, PPFrame $frame, array $args)
     {
-        $helper = ParserHelper::getInstance();
         /**
          * @var array $magicArgs
          * @var array $values
          * @var array $dupes
          */
-        list($magicArgs, $values, $dupes) = $helper->getMagicArgs(
+        list($magicArgs, $values, $dupes) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_ALLOWEMPTY,
@@ -238,7 +235,7 @@ class Riven
             self::NA_DELIMITER
         );
 
-        if (!$helper->checkIfs($frame, $magicArgs)) {
+        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
 
@@ -247,7 +244,7 @@ class Riven
          * @var array $named
          * @var array $values
          */
-        list($named, $values) = $helper->splitNamedArgs($frame, $values);
+        list($named, $values) = ParserHelper::splitNamedArgs($frame, $values);
         if (count($values) < 3 || !isset($values[1])) {
             return '';
         }
@@ -283,15 +280,14 @@ class Riven
     {
         // This is just a loop over the core of #ifexistsx. Timing tests on other methods have so far failed thanks to
         // the existing cache mechanisms behind title checks.
-        $helper = ParserHelper::getInstance();
-        list($magicArgs, $values) = $helper->getMagicArgs(
+        list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT
         );
 
-        if (!$helper->checkIfs($frame, $magicArgs)) {
+        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
 
@@ -341,15 +337,14 @@ class Riven
      */
     public static function doIfExistX(Parser $parser, PPFrame $frame, array $args): string
     {
-        $helper = ParserHelper::getInstance();
-        list($magicArgs, $values) = $helper->getMagicArgs(
+        list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT
         );
 
-        if (!$helper->checkIfs($frame, $magicArgs)) {
+        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
 
@@ -379,8 +374,7 @@ class Riven
      */
     public static function doInclude(Parser $parser, PPFrame $frame, array $args): string
     {
-        $helper = ParserHelper::getInstance();
-        list($magicArgs, $values) = $helper->getMagicArgs(
+        list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_DEBUG,
@@ -388,7 +382,7 @@ class Riven
             ParserHelper::NA_IFNOT
         );
 
-        if (count($values) <= 0 || !$helper->checkIfs($frame, $magicArgs)) {
+        if (count($values) <= 0 || !ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
 
@@ -405,8 +399,8 @@ class Riven
             }
         }
 
-        $debug = $helper->checkDebugMagic($parser, $frame, $magicArgs);
-        return $helper->formatPFForDebug($output, $debug);
+        $debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
+        return ParserHelper::formatPFForDebug($output, $debug);
     }
 
     /**
@@ -428,8 +422,7 @@ class Riven
     public static function doPickFrom(Parser $parser, PPFrame $frame, array $args): string
     {
         $parser->addTrackingCategory(self::TRACKING_PICKFROM);
-        $helper = ParserHelper::getInstance();
-        list($magicArgs, $values) = $helper->getMagicArgs(
+        list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_ALLOWEMPTY,
@@ -440,11 +433,11 @@ class Riven
         );
 
         $npick = intval(array_shift($values));
-        if ($npick <= 0 || !count($values) || !$helper->checkIfs($frame, $magicArgs)) {
+        if ($npick <= 0 || !count($values) || !ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
 
-        $values = $helper->expandArray($frame, $values, true);
+        $values = ParserHelper::expandArray($frame, $values, true);
         $allowEmpty = $magicArgs[ParserHelper::NA_ALLOWEMPTY] ?? '';
         if (!$allowEmpty) {
             $values = array_values(array_filter($values, function ($value) {
@@ -472,7 +465,7 @@ class Riven
             $values = array_splice($values, 0, $npick); // cut off unwanted items
         }
 
-        $separator = $helper->getSeparator($magicArgs);
+        $separator = ParserHelper::getSeparator($magicArgs);
         return implode($separator, $values);
     }
 
@@ -495,8 +488,7 @@ class Riven
     public static function doRand(Parser $parser, PPFrame $frame, array $args): string
     {
         $parser->addTrackingCategory(self::TRACKING_RAND);
-        $helper = ParserHelper::getInstance();
-        list($magicArgs, $values) = $helper->getMagicArgs(
+        list($magicArgs, $values) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             self::NA_SEED
@@ -563,8 +555,7 @@ class Riven
      */
     public static function doSplitArgs(Parser $parser, PPFrame $frame, array $args)
     {
-        $helper = ParserHelper::getInstance();
-        list($magicArgs, $values, $dupes) = $helper->getMagicArgs(
+        list($magicArgs, $values, $dupes) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             ParserHelper::NA_ALLOWEMPTY,
@@ -581,12 +572,12 @@ class Riven
          * @var array $values
          * @var array $dupes
          */
-        if (!$helper->checkIfs($frame, $magicArgs)) {
+        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
 
         // show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
-        list($named, $values) = $helper->splitNamedArgs($frame, $values);
+        list($named, $values) = ParserHelper::splitNamedArgs($frame, $values);
         if (!isset($values[1])) {
             return '';
         }
@@ -629,24 +620,22 @@ class Riven
      *
      * @return string|array The resulting text after having links stripped.
      */
-    public static function doTrimLinks(Parser $parser, PPFrame $frame, array $args)
+    public static function doTrimLinks(Parser $parser, PPFrame $frame, array $args): string
     {
         if (!isset($args[0])) {
             return '';
         }
 
-        $helper = ParserHelper::getInstance();
-        list($magicArgs) = $helper->getMagicArgs(
+        list($magicArgs) = ParserHelper::getMagicArgs(
             $frame,
             $args,
             self::NA_MODE
         );
 
-        $helper = ParserHelper::getInstance();
-        if (!$helper->magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
+        if (!ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
             $output = $parser->recursiveTagParse($args[0]);
             $output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
-            $output = $helper->replaceLinkHoldersText($parser, $output);
+            $output = VersionHelper::getInstance()->replaceLinkHoldersText($parser, $output);
             return $output;
         }
 
@@ -658,11 +647,12 @@ class Riven
         $flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
         $rootNode = $preprocessor->preprocessToObj($args[0], $flag);
         $output = self::trimLinksParseNode($parser, $frame, $rootNode);
-        $output = $helper->getStripState($parser)->unstripBoth($output);
-        $output = $helper->replaceLinkHoldersText($parser, $output);
+        $output = VersionHelper::getInstance()->getStripState($parser)->unstripBoth($output);
+        $output = VersionHelper::getInstance()->replaceLinkHoldersText($parser, $output);
         $newNode = $preprocessor->preprocessToObj($output, $flag);
         $output = $frame->expand($newNode);
-        return [$output, 'noparse' => true];
+
+        return $output;
     }
 
     /**
@@ -673,7 +663,7 @@ class Riven
      */
     public static function init(): void
     {
-        ParserHelper::getInstance()->cacheMagicWords([
+        ParserHelper::cacheMagicWords([
             self::AV_TOP,
             self::NA_CLEANIMG,
             self::NA_DELIMITER,
@@ -1181,13 +1171,12 @@ class Riven
         }
 
         // show("Templates:\n", $templates);
-        $helper = ParserHelper::getInstance();
-        $separator = $helper->getSeparator($magicArgs);
+        $separator = ParserHelper::getSeparator($magicArgs);
         $output = implode($separator, $templates);
         // show("Output:\n", $output);
 
-        $debug = $helper->checkDebugMagic($parser, $frame, $magicArgs);
-        $output = $helper->formatPFForDebug($output, $debug);
+        $debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
+        $output = ParserHelper::formatPFForDebug($output, $debug);
         return ['text' => $output, 'noparse' => false];
     }
 
