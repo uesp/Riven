@@ -15,13 +15,16 @@
 		]
 	},
 	"ExtensionMessagesFiles": {
+		"ParserHelperMagic": "i18n/ParserHelper.i18n.magic.php",
 		"RivenMagic": "i18n/Riven.i18n.magic.php"
 	},
 	"AutoloadClasses": {
+		"ParserHelper": "includes/ParserHelper.php",
 		"Riven": "includes/Riven.php",
 		"RivenHooks": "includes/RivenHooks.php",
 		"TableCell": "includes/TableCell.php",
-		"TableRow": "includes/TableRow.php"
+		"TableRow": "includes/TableRow.php",
+		"VersionHelper": "includes/VersionHelper.php"
 	},
 	"Hooks": {
 		"MagicWordwgVariableIDs": "RivenHooks::onMagicWordwgVariableIDs",
