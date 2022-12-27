@@ -31,5 +31,5 @@ $magicWords['en'] = [
 	Riven::TG_CLEANSPACE => [0, 'cleanspace'],
 	Riven::TG_CLEANTABLE => [0, 'cleantable'],
 
-	Riven::VR_SKINNAME => [1, 'skin'],
+	Riven::VR_SKINNAME => [1, 'SKINNAME']
 ];
