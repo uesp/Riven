@@ -12,12 +12,11 @@ $magicWords['en'] = [
 
 	Riven::NA_ALLOWEMPTY => [0, 'allowempty'],
 	Riven::NA_CLEANIMG => [0, 'cleanimages'],
-	Riven::NA_DELIMITER => [0, 'delimiter', 'sa:delimiter'],
-	Riven::NA_EXPLODE => [0, 'explode', 'sa:explode'],
+	Riven::NA_DELIMITER => [0, 'delimiter', ':delimiter'],
+	Riven::NA_EXPLODE => [0, 'explode', ':explode'],
 	Riven::NA_MODE => [0, 'mode'],
 	Riven::NA_PROTROWS => [0, 'protectrows'],
 	Riven::NA_SEED => [0, 'seed'],
-	Riven::NA_SEPARATOR => [0, 'separator', 'sa:separator'],
 
 	Riven::PF_ARG => [0, 'arg'],
 	Riven::PF_EXPLODEARGS => [0, 'explodeargs'],

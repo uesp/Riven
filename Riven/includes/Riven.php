@@ -26,7 +26,6 @@ class Riven
     public const NA_MODE       = 'riven-mode';
     public const NA_PROTROWS   = 'riven-protectrows';
     public const NA_SEED       = 'riven-seed';
-    public const NA_SEPARATOR  = 'riven-separator';
 
     private const TRACKING_ARG = 'riven-tracking-arg';
 
@@ -125,7 +124,7 @@ class Riven
                 break;
         }
 
-        if (self::checkDebugMagic($parser, $frame, $args)) {
+        if (ParserHelper::checkDebugMagic($parser, $frame, $args)) {
             return ParserHelper::formatTagForDebug($output, true);
         }
 
@@ -194,7 +193,7 @@ class Riven
         $after = substr($text, $offset);
         $output .= $after;
 
-        $debug = self::checkDebugMagic($parser, $frame, $attributes);
+        $debug = ParserHelper::checkDebugMagic($parser, $frame, $attributes);
         return $debug
             ? ['<pre>' . htmlspecialchars($output) . '</pre>', 'markerType' => 'nowiki']
             : [$output, 'preprocessFlags' => PPFrame::RECOVER_ORIG];
@@ -234,10 +233,10 @@ class Riven
             $args,
             self::NA_ALLOWEMPTY,
             self::NA_DELIMITER,
-            self::NA_SEPARATOR,
             ParserHelper::NA_DEBUG,
             ParserHelper::NA_IF,
-            ParserHelper::NA_IFNOT
+            ParserHelper::NA_IFNOT,
+            ParserHelper::NA_SEPARATOR
         );
 
         if (!ParserHelper::checkIfs($frame, $magicArgs)) {
@@ -404,7 +403,7 @@ class Riven
             }
         }
 
-        $debug = self::checkDebugMagic($parser, $frame, $magicArgs);
+        $debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
         return ParserHelper::formatPFForDebug($output, $debug);
     }
 
@@ -432,9 +431,9 @@ class Riven
             $args,
             self::NA_ALLOWEMPTY,
             self::NA_SEED,
-            self::NA_SEPARATOR,
             ParserHelper::NA_IF,
-            ParserHelper::NA_IFNOT
+            ParserHelper::NA_IFNOT,
+            ParserHelper::NA_SEPARATOR
         );
 
         $npick = intval(array_shift($values));
@@ -473,7 +472,7 @@ class Riven
             $values = array_splice($values, 0, $npick); // cut off unwanted items
         }
 
-        $separator = self::getSeparator($magicArgs);
+        $separator = ParserHelper::getSeparator($magicArgs);
         return implode($separator, $values);
     }
 
@@ -569,10 +568,10 @@ class Riven
             self::NA_ALLOWEMPTY,
             self::NA_DELIMITER,
             self::NA_EXPLODE,
-            self::NA_SEPARATOR,
             ParserHelper::NA_DEBUG,
             ParserHelper::NA_IF,
-            ParserHelper::NA_IFNOT
+            ParserHelper::NA_IFNOT,
+            ParserHelper::NA_SEPARATOR
         );
 
         /**
@@ -663,28 +662,6 @@ class Riven
     }
 
     /**
-     * Parse separator string for C-like character entities and surrounding quotes.
-     *
-     * @param array $magicArgs The magic-word arguments as created by getMagicArgs().
-     *
-     * @return string The parsed string.
-     *
-     */
-    public static function getSeparator(array $magicArgs): string
-    {
-        $separator = $magicArgs[self::NA_SEPARATOR] ?? '';
-        if (strlen($separator) > 1) {
-            $separator = stripcslashes($separator);
-            $first = $separator[0];
-            if (in_array($first, ['\'', '`', '"']) && $first === substr($separator, -1, 1)) {
-                return substr($separator, 1, -1);
-            }
-        }
-
-        return $separator;
-    }
-
-    /**
      * Initializes all the relevant aspects of Riven.
      *
      * @return void;
@@ -699,8 +676,7 @@ class Riven
             self::NA_EXPLODE,
             self::NA_MODE,
             self::NA_PROTROWS,
-            self::NA_SEED,
-            self::NA_SEPARATOR,
+            self::NA_SEED
         ]);
     }
 
@@ -754,26 +730,6 @@ class Riven
         }
 
         return $map;
-    }
-
-    /**
-     * Checks the debug argument to see if it's boolean or 'always'.Expects the keys to be magic word values rather
-     * than magic word IDs.
-     *
-     * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The frame in use.
-     * @param array $magicArgs The magic-word arguments as created by getMagicArgs().
-     *
-     * @return bool
-     *
-     */
-    private static function checkDebugMagic(Parser $parser, PPFrame $frame, array $magicArgs): bool
-    {
-        $debug = $frame->expand($magicArgs[ParserHelper::NA_DEBUG] ?? false);
-        // RHshow('Debug param: ', boolval($debug) ? 'Yes' : 'No', "\nIs preview: ", $parser->getOptions()->getIsPreview(), "\nDebug word: ", self::getMagicWord(self::AV_ALWAYS)->matchStartToEnd($debug));
-        return $parser->getOptions()->getIsPreview()
-            ? (bool)$debug
-            : VersionHelper::getInstance()->getMagicWord(ParserHelper::AV_ALWAYS)->matchStartToEnd($debug);
     }
 
     /**
@@ -1221,11 +1177,11 @@ class Riven
         }
 
         // show("Templates:\n", $templates);
-        $separator = self::getSeparator($magicArgs);
+        $separator = ParserHelper::getSeparator($magicArgs);
         $output = implode($separator, $templates);
         // show("Output:\n", $output);
 
-        $debug = self::checkDebugMagic($parser, $frame, $magicArgs);
+        $debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
         return ParserHelper::formatTagForDebug($output, $debug);
     }
 

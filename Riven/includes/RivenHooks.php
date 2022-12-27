@@ -1,7 +1,5 @@
 <?php
 
-use MediaWiki\MediaWikiServices;
-
 /* To disable tags, comment out lines in $tagInfo.
  * To disable variables, comment out lines in onMagicWordwgVariableIDs.
  * To disable parser functions, comment out lines in initParserFunctions.
