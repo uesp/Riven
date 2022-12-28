@@ -336,10 +336,10 @@ class Riven
      *        if: A condition that must be true in order for this function to run.
      *     ifnot: A condition that must be false in order for this function to run.
      *
-     * @return string The result of the check or an empty string if the if/ifnot failed.
+     * @return array The result of the check or an empty string if the if/ifnot failed.
      *
      */
-    public static function doIfExistX(Parser $parser, PPFrame $frame, array $args): string
+    public static function doIfExistX(Parser $parser, PPFrame $frame, array $args): array
     {
         [$magicArgs, $values] = ParserHelper::getMagicArgs(
             $frame,
@@ -348,16 +348,15 @@ class Riven
             ParserHelper::NA_IFNOT
         );
 
-        if (!ParserHelper::checkIfs($frame, $magicArgs)) {
-            return '';
+        if (ParserHelper::checkIfs($frame, $magicArgs)) {
+            $titleText = trim($frame->expand($values[0] ?? ''));
+            $index = self::existsCommon($parser, Title::newFromText($titleText)) ? 1 : 2;
+            $retval = $values[$index] ?? '';
+        } else {
+            $retval = '';
         }
 
-        $titleText = trim($frame->expand($values[0] ?? ''));
-        $result = self::existsCommon($parser, Title::newFromText($titleText)) ? 1 : 2;
-        $result = $values[$result] ?? null;
-        $result = is_null($result) ? '' : trim($frame->expand($result));
-        // RHshow('#ifexistx result: ', $result);
-        return $result;
+        return [$retval, 'noparse' => true, 'isChildObj' => true];
     }
 
     /**
@@ -436,44 +435,36 @@ class Riven
             ParserHelper::NA_SEPARATOR
         );
 
-        $npick = intval(array_shift($values));
+        $npick = (int)reset($values);
+        unset($values[0]);
         if ($npick <= 0 || !count($values) || !ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
 
-        foreach ($values as &$value) {
+        // We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based
+        // seed will cause all subsequent parameterless calls to mt_srand() to only generate hourly results).
+        $seed = (int)$magicArgs[self::NA_SEED] ?? 0;
+        mt_srand($seed);
+
+        // This makes the untested assumption that:
+        //     shuffle(all values) then expand(needed values) will be significantly faster than
+        //     expand(all values) then shuffle(needed values)
+        shuffle($values);
+        $allowEmpty = $magicArgs[self::NA_ALLOWEMPTY] ?? false;
+        $retval = [];
+        foreach ($values as $value) {
             $value = trim($frame->expand($value));
-        }
-
-        $allowEmpty = $magicArgs[self::NA_ALLOWEMPTY] ?? '';
-        if (!$allowEmpty) {
-            $values = array_values(array_filter($values, function ($value) {
-                return strlen($value);
-            }));
-
-            if (!count($values)) {
-                return '';
+            if (strlen($value) > 0 || $allowEmpty) {
+                $retval[] = $value;
+                if (!--$npick) {
+                    break;
+                }
             }
         }
 
         $parser->getOutput()->updateCacheExpiry(0);
-        $seed = $magicArgs[self::NA_SEED] ?? null;
-        if (is_null($seed)) {
-            // We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based
-            // seed will cause all subsequent parameterless calls to mt_srand() to only generate hourly results).
-            mt_srand();
-        } else {
-            mt_srand($seed);
-        }
-
-        shuffle($values); // randomize list
-
-        if ($npick < count($values)) {
-            $values = array_splice($values, 0, $npick); // cut off unwanted items
-        }
-
         $separator = ParserHelper::getSeparator($magicArgs);
-        return implode($separator, $values);
+        return implode($separator, $retval);
     }
 
     /**
@@ -501,7 +492,7 @@ class Riven
             self::NA_SEED
         );
 
-        if (count($values) == 1) {
+        if (count($values) === 1) {
             $low = 1;
             $high = trim($frame->expand($values[0]));
         } else {
@@ -515,11 +506,10 @@ class Riven
             return $low;
         }
 
-        if (isset($magicArgs[self::NA_SEED])) {
-            mt_srand(($magicArgs[self::NA_SEED]));
-        } else {
-            mt_srand();
-        }
+        // We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based
+        // seed will cause all subsequent parameterless calls to mt_srand() to only generate hourly results).
+        $seed = (int)$magicArgs[self::NA_SEED] ?? 0;
+        mt_srand($seed);
 
         $parser->getOutput()->updateCacheExpiry(0);
         return ($low > $high)
@@ -627,10 +617,10 @@ class Riven
      *
      * @return string|array The resulting text after having links stripped.
      */
-    public static function doTrimLinks(Parser $parser, PPFrame $frame, array $args): string
+    public static function doTrimLinks(Parser $parser, PPFrame $frame, array $args): array
     {
         if (!isset($args[0])) {
-            return '';
+            return ['text' => '', 'noparse' => false];
         }
 
         [$magicArgs] = ParserHelper::getMagicArgs(
@@ -644,7 +634,7 @@ class Riven
             $output = $parser->recursiveTagParse($args[0]);
             $output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
             $output = $helper->replaceLinkHoldersText($parser, $output);
-            return $output;
+            return ['text' => $output, 'noparse' => false];
         }
 
         // TODO: Have another look at this. The original approach may actually be doable.
@@ -658,7 +648,7 @@ class Riven
         $output = $helper->getStripState($parser)->unstripBoth($output);
         $output = $helper->replaceLinkHoldersText($parser, $output);
         $newNode = $preprocessor->preprocessToObj($output, $flag);
-        return $frame->expand($newNode);
+        return ['text' => $newNode, 'noparse' => true, 'isChildObj' => true];
     }
 
     /**
@@ -1164,16 +1154,16 @@ class Riven
      * @return mixed The text of all the function calls.
      *
      */
-    private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $magicArgs, string $templateName, int $nargs, array $named, array $values)
+    private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $magicArgs, string $templateName, int $nargs, array $named, array $values): array
     {
         if ($nargs < 1 || empty($templateName)) {
-            return '';
+            return [''];
         }
 
         $allowEmpty = $magicArgs[self::NA_ALLOWEMPTY] ?? false;
         $templates = self::getTemplates($frame, $templateName, $nargs, $values, $named, $allowEmpty);
         if (empty($templates)) {
-            return '';
+            return [''];
         }
 
         // show("Templates:\n", $templates);
