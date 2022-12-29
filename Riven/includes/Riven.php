@@ -552,6 +552,12 @@ class Riven
      */
     public static function doSplitArgs(Parser $parser, PPFrame $frame, array $args)
     {
+        /**
+         * @var PPTemplateFrame_Hash $frame
+         * @var array $magicArgs
+         * @var array $values
+         * @var array $dupes
+         */
         [$magicArgs, $values, $dupes] = ParserHelper::getMagicArgs(
             $frame,
             $args,
@@ -564,11 +570,6 @@ class Riven
             ParserHelper::NA_SEPARATOR
         );
 
-        /**
-         * @var array $magicArgs
-         * @var array $values
-         * @var array $dupes
-         */
         if (!ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
@@ -588,19 +589,27 @@ class Riven
         $nargs = intval($frame->expand($values[1]));
         if (isset($magicArgs[self::NA_EXPLODE])) {
             // Explode
-            $values = explode($magicArgs[self::NA_DELIMITER] ?? ',', $magicArgs[self::NA_EXPLODE]);
+            $delimiter = $magicArgs[self::NA_DELIMITER] ?? ',';
+            $values = explode($delimiter, $magicArgs[self::NA_EXPLODE]);
         } else {
-            $values = array_slice($values, 2);
-            if (count($values) == 0) {
-                $values = array_values($frame->getNumberedArguments());
-            }
+            if (count($values) > 2) {
+                $values = array_slice($values, 2);
+            } else {
+                // This bypasses the various getArgument() routines which all use the template expansion cache. We
+                // can't use that or else we get things like {{!}} being turned into |. This also ensures that if we're
+                // calling a template or sub-template that has effects, they all get the unparsed values.
 
-            /*
-            $values = [];
-            foreach ($newValues as $value) {
-                $values[] = trim($frame->expand($value));
+                $values = $frame->numberedArgs;
+                foreach ($frame->namedArgs as $key => $value) {
+                    if ((int)$key > 0) {
+                        $values[$key] = $value;
+                    }
+                }
+
+                ksort($values, SORT_NUMERIC);
+                $values = array_values($values);
+                // RHshow($values);
             }
-            */
         }
 
         return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, array_merge($named, $dupes), $values);
@@ -977,39 +986,38 @@ class Riven
      * @return array A string[] containing the individual template calls that #splitargs splits into.
      *
      */
-    private static function getTemplates(PPFrame $frame, string $templateName, int $nargs, array $values, array $named, bool $allowEmpty): array
+    private static function getTemplates(PPTemplateFrame_Hash $parent, string $templateName, int $nargs, array $values, array $named, bool $allowEmpty): array
     {
         if (!$nargs) {
             $nargs = count($values);
         }
 
-        if (count($values) == 0) {
+        if (count($values) === 0) {
             return [];
         }
 
         $templates = [];
         $namedParameters = '';
         foreach ($named as $name => $value) {
-            $value = $frame->expand($value);
+            $value = $parent->expand($value, PPFrame::RECOVER_ORIG);
             $namedParameters .= "|$name=$value";
         }
 
         $templates = [];
-        if (!is_array($values)) {
-            $values = [trim($values)];
-        }
-
         for ($index = 0; $index < count($values); $index += $nargs) {
             $numberedParameters = '';
             $blank = true;
             for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
                 $value = $values[$index + $paramNum] ?? null;
                 if (!is_null($value)) {
-                    if ($value instanceof  PPNode) {
-                        $value = $frame->expand($value, PPFrame::NO_TEMPLATES | PPFrame::NO_TAGS);
+                    if ($value instanceof PPNode) {
+                        $value = $parent->expand($value, PPFrame::RECOVER_ORIG);
                     }
 
-                    if (strlen($value) > 0) {
+                    // Unlike normal templates, we strip off spacing even for numbered arguments, so groups can be
+                    // formatted each on a new line.
+                    $value = trim($value);
+                    if (strlen($value)) {
                         $blank = false;
                     }
 
@@ -1144,7 +1152,7 @@ class Riven
      * Takes the input from the various forms of #splitargs and returns it as a cohesive set of variables.
      *
      * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The template frame in use.
+     * @param PPTemplateFrame_Hash $frame The template frame in use.
      * @param array $magicArgs The template arguments that contain a recognized keyword for the function in string key/PPNode value format.
      * @param string $templateName The name of the template.
      * @param int $nargs The number of arguments to split parameters into.
@@ -1154,14 +1162,15 @@ class Riven
      * @return mixed The text of all the function calls.
      *
      */
-    private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $magicArgs, string $templateName, int $nargs, array $named, array $values): array
+    private static function splitArgsCommon(Parser $parser, PPTemplateFrame_Hash $frame, array $magicArgs, string $templateName, int $nargs, array $named, array $values): array
     {
+        $parent = $frame->parent ?? $frame;
         if ($nargs < 1 || empty($templateName)) {
             return [''];
         }
 
         $allowEmpty = $magicArgs[self::NA_ALLOWEMPTY] ?? false;
-        $templates = self::getTemplates($frame, $templateName, $nargs, $values, $named, $allowEmpty);
+        $templates = self::getTemplates($parent, $templateName, $nargs, $values, $named, $allowEmpty);
         if (empty($templates)) {
             return [''];
         }
@@ -1172,7 +1181,15 @@ class Riven
         // show("Output:\n", $output);
 
         $debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
-        return ParserHelper::formatTagForDebug($output, $debug);
+        $output = $parser->preprocessToDom($output);
+        $output = $parent->expand($output);
+
+        return [
+            'text' => ($debug && strlen($output)
+                ? '<pre>' . htmlspecialchars($output) . '</pre>'
+                : $output),
+            'noparse' => true
+        ];
     }
 
     /**
