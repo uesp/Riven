@@ -443,8 +443,7 @@ class Riven
 
         // We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based
         // seed will cause all subsequent parameterless calls to mt_srand() to only generate hourly results).
-        $seed = (int)$magicArgs[self::NA_SEED] ?? 0;
-        mt_srand($seed);
+        isset($seed) ? mt_srand((int)$seed) : mt_srand();
 
         // This makes the untested assumption that:
         //     shuffle(all values) then expand(needed values) will be significantly faster than
@@ -507,9 +506,9 @@ class Riven
         }
 
         // We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based
-        // seed will cause all subsequent parameterless calls to mt_srand() to only generate hourly results).
-        $seed = (int)$magicArgs[self::NA_SEED] ?? 0;
-        mt_srand($seed);
+        // seed from a previous rand/pickfrom will cause all subsequent seedless calls to either function to only
+        // generate hourly results).
+        isset($magicArgs[self::NA_SEED]) ? mt_srand((int)$magicArgs[self::NA_SEED]) : mt_srand();
 
         $parser->getOutput()->updateCacheExpiry(0);
         return ($low > $high)
@@ -598,7 +597,6 @@ class Riven
                 // This bypasses the various getArgument() routines which all use the template expansion cache. We
                 // can't use that or else we get things like {{!}} being turned into |. This also ensures that if we're
                 // calling a template or sub-template that has effects, they all get the unparsed values.
-
                 $values = $frame->numberedArgs;
                 foreach ($frame->namedArgs as $key => $value) {
                     if ((int)$key > 0) {
