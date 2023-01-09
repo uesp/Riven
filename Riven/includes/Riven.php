@@ -403,7 +403,7 @@ class Riven
         }
 
         $debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
-        return ParserHelper::formatPFForDebug($output, $debug);
+        return ParserHelper::formatPFForDebug($output, $debug, false);
     }
 
     /**
