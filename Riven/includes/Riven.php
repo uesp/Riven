@@ -356,7 +356,7 @@ class Riven
             $retval = '';
         }
 
-        return [$retval, 'noparse' => true, 'isChildObj' => true];
+        return ['text' => $retval, 'noparse' => true, 'isChildObj' => true];
     }
 
     /**
@@ -1180,14 +1180,10 @@ class Riven
 
         $debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
         $output = $parser->preprocessToDom($output);
-        $output = $parent->expand($output);
+        // Some templates are parsed even inside pre tags, so use RECOVER_ORIG to ensure that templates and the like
+        $output = $parent->expand($output, PPFrame::RECOVER_ORIG);
 
-        return [
-            'text' => ($debug && strlen($output)
-                ? '<pre>' . htmlspecialchars($output) . '</pre>'
-                : $output),
-            'noparse' => true
-        ];
+        return ParserHelper::formatPFForDebug($output, $debug);
     }
 
     /**
