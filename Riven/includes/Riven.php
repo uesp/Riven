@@ -160,7 +160,7 @@ class Riven
      */
     public static function doCleanTable(string $content, array $attributes, Parser $parser, PPFrame $frame): array
     {
-        #RHshow("doCleanTable wiki text:\n", $text);
+        #RHshow('doCleanTable wiki text', $text);
 
         // This ensures that tables are not cleaned if being displayed directly on the Template page.
         // Previewing will process cleantable normally.
@@ -176,7 +176,7 @@ class Riven
         $attributes = ParserHelper::transformAttributes($attributes);
         #RHshow('Post-transform', $attributes);
         $text = $parser->recursiveTagParse($content, $frame);
-        #RHshow("Tag Parsed:\n", $content);
+        #RHecho('Tag Parsed', $content);
 
         $text = VersionHelper::getInstance()->getStripState($parser)->unstripNoWiki($text);
         $offset = 0;
@@ -606,7 +606,7 @@ class Riven
 
                 ksort($values, SORT_NUMERIC);
                 $values = array_values($values);
-                #RHshow($values);
+                #RHecho($values);
             }
         }
 
@@ -742,9 +742,9 @@ class Riven
      */
     private static function cleanRows(string $input, int $protectRows = 1, bool $cleanImages = true): string
     {
-        #RHshow("Clean Rows In:\n", $input);
+        #RHshow('Clean Rows In', $input);
         $map = self::buildMap($input);
-        #RHshow($map);
+        #RHecho($map);
         $sectionHasContent = false;
         $contentRows = false;
         for ($rowNum = count($map) - 1; $rowNum >= $protectRows; $rowNum--) {
@@ -759,7 +759,7 @@ class Riven
 
             /** @var TableCell $cell */
             foreach ($row->cells as $cell) {
-                #RHshow($cell);
+                #RHecho($cell);
                 $content = trim(html_entity_decode($cell->getContent()));
                 if ($cleanImages && !$cell->getIsHeader()) {
                     // Remove <img> tags
@@ -778,7 +778,7 @@ class Riven
                             $rowHasImageOnlyCells = true;
                         }
                     } else {
-                        #RHshow('\'', $content, '\'');
+                        #RHecho('\'', $content, '\'');
                         $rowHasNonImageCells |= !$cell->getIsHeader();
                     }
                 }
@@ -798,7 +798,7 @@ class Riven
                 }
             }
 
-            #RHshow('Row', $rowNum, "\n", $rowHasContent, "\n", $row);
+            #RHshow('Row ' . $rowNum . ' (' . $rowHasContent ? 'has content' : 'no content' . ')', $row);
             $rowHasContent |= $rowHasImageOnlyCells && !$rowHasNonImageCells;
             $sectionHasContent |= $rowHasContent;
             if ($allHeaders) {
@@ -807,7 +807,7 @@ class Riven
                 // no content. This can happen if the table starts with a main header followed immediately by a
                 // sub-header.
                 if ($contentRows || ($rowNum === 0 && $protectRows === 0)) {
-                    #RHshow($contentRows);
+                    #RHecho($contentRows);
                     if ($sectionHasContent) {
                         $sectionHasContent = false;
                     } else {
@@ -830,7 +830,7 @@ class Riven
             }
         }
 
-        #RHshow($map);
+        #RHecho($map);
         return self::mapToTable($map);
     }
 
@@ -1092,7 +1092,7 @@ class Riven
             $output .= $row->getOpenTag() . "\n";
             /** @var TableCell $cell */
             foreach ($row->cells as $cell) {
-                #RHshow($cell);
+                #RHecho($cell);
                 // Conditional is to avoid unwanted blank lines in output.
                 $html = $cell->toHtml();
                 if ($html) {
@@ -1120,7 +1120,7 @@ class Riven
      */
     private static function parseTable(Parser $parser, $input, int &$offset, int $protectRows, bool $cleanImages, ?string $open = null)
     {
-        #RHshow("Parse Table In:\n", substr($input, $offset));
+        #RHshow('Parse Table In', substr($input, $offset));
         $output = '';
         while (preg_match('#</?table[^>]*?>\s*#i', $input, $matches, PREG_OFFSET_CAPTURE, $offset)) {
             $match = $matches[0];
@@ -1142,7 +1142,7 @@ class Riven
             $output = $parser->insertStripItem($output);
         }
 
-        #RHshow("Output:\n", $output);
+        #RHshow('Output', $output);
         return $output;
     }
 
