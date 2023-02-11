@@ -176,7 +176,7 @@ class Riven
         $attributes = ParserHelper::transformAttributes($attributes);
         #RHshow('Post-transform', $attributes);
         $text = $parser->recursiveTagParse($content, $frame);
-        #RHecho('Tag Parsed', $content);
+        #RHshow('Tag Parsed', $text);
 
         $text = VersionHelper::getInstance()->getStripState($parser)->unstripNoWiki($text);
         $offset = 0;
