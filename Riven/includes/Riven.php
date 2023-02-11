@@ -172,9 +172,9 @@ class Riven
             return $content;
         }
 
-        #RHshow('Pre-transform: ', $attributes);
+        #RHshow('Pre-transform', $attributes);
         $attributes = ParserHelper::transformAttributes($attributes);
-        #RHshow('Post-transform: ', $attributes);
+        #RHshow('Post-transform', $attributes);
         $text = $parser->recursiveTagParse($content, $frame);
         #RHshow("Tag Parsed:\n", $content);
 
@@ -798,7 +798,7 @@ class Riven
                 }
             }
 
-            #RHshow('Row: ', $rowNum, "\n", $rowHasContent, "\n", $row);
+            #RHshow('Row', $rowNum, "\n", $rowHasContent, "\n", $row);
             $rowHasContent |= $rowHasImageOnlyCells && !$rowHasNonImageCells;
             $sectionHasContent |= $rowHasContent;
             if ($allHeaders) {
@@ -822,7 +822,7 @@ class Riven
                 if (!$rowHasContent) {
                     foreach ($spans as $cell) {
                         $cell->decrementRowspan();
-                        #RHshow('RowCount: ', $cell->getRowspan());
+                        #RHshow('RowCount', $cell->getRowspan());
                     }
 
                     unset($map[$rowNum]);
