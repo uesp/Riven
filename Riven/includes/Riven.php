@@ -97,12 +97,22 @@ class Riven
      */
     public static function doCleanSpace(string $content, array $attributes, Parser $parser, PPFrame $frame)
     {
-        static $cleanspaceMagicWords;
-        $cleanspaceMagicWords = $cleanspaceMagicWords ?? new MagicWordArray([self::AV_RECURSIVE, self::AV_TOP, self::AV_ORIGINAL]);
+        static $magicWords;
+        $magicWords = $magicWords ?? new MagicWordArray([
+            ParserHelper::NA_DEBUG,
+            self::NA_MODE
+        ]);
 
-        $args = ParserHelper::transformAttributes($attributes);
-        $mode = $args[self::NA_MODE] ?? self::AV_ORIGINAL;
-        $match = $cleanspaceMagicWords->matchStartToEnd($mode);
+        $args = ParserHelper::transformAttributes($attributes, $magicWords);
+
+        static $modeWords;
+        $modeWords = $modeWords ?? new MagicWordArray([
+            self::AV_RECURSIVE,
+            self::AV_TOP,
+            self::AV_ORIGINAL
+        ]);
+
+        $match = $modeWords->matchStartToEnd($args[self::NA_MODE] ?? self::AV_ORIGINAL);
         $modeWord = $match === false ? self::AV_ORIGINAL : $match;
 
         $output = $content;
@@ -172,8 +182,20 @@ class Riven
             return $content;
         }
 
+        static $magicWords;
+        $magicWords = $magicWords ?? new MagicWordArray([
+            ParserHelper::NA_DEBUG,
+            self::NA_ALLOWEMPTY,
+            self::NA_CLEANIMG,
+            self::NA_DELIMITER,
+            self::NA_EXPLODE,
+            self::NA_MODE,
+            self::NA_PROTROWS,
+            self::NA_SEED
+        ]);
+
         #RHshow('Pre-transform', $attributes);
-        $attributes = ParserHelper::transformAttributes($attributes);
+        $attributes = ParserHelper::transformAttributes($attributes, $magicWords);
         #RHshow('Post-transform', $attributes);
         $text = $parser->recursiveTagParse($content, $frame);
         #RHshow('Tag Parsed', $text);
@@ -203,7 +225,7 @@ class Riven
      * A variant of #splitargs. See that function for details.
      *
      * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The template frame in use.
+     * @param PPTemplateFrame_Hash $frame The template frame in use.
      * @param array $args Function arguments:
      *              1: The template to call.
      *              2: The number of parameters to split on.
@@ -223,22 +245,19 @@ class Riven
      */
     public static function doExplodeArgs(Parser $parser, PPFrame $frame, array $args)
     {
-        /**
-         * @var array $magicArgs
-         * @var array $values
-         * @var array $dupes
-         */
-        [$magicArgs, $values, $dupes] = ParserHelper::getMagicArgs(
-            $frame,
-            $args,
+        static $magicWords;
+        $magicWords = $magicWords ?? new MagicWordArray([
             self::NA_ALLOWEMPTY,
             self::NA_DELIMITER,
             ParserHelper::NA_DEBUG,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT,
             ParserHelper::NA_SEPARATOR
-        );
+        ]);
 
+        /** @var array $magicArgs */
+        /** @var array $values */
+        [$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
         if (!ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
@@ -264,14 +283,14 @@ class Riven
         $values = explode($delimiter, $frame->expand($values[2]));
 
         // show($values);
-        return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, array_merge($named, $dupes), $values);
+        return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, $named, $values);
     }
 
     /**
      * Finds the first page that exists in the list of parameters.
      *
      * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The template frame in use.
+     * @param PPTemplateFrame_Hash $frame The template frame in use.
      * @param array $args Function arguments:
      *        1+: All unnamed parameters are page names to search.
      *        if: A condition that must be true in order for this function to run.
@@ -284,13 +303,15 @@ class Riven
     {
         // This is just a loop over the core of #ifexistsx. Timing tests on other methods have so far failed thanks to
         // the existing cache mechanisms behind title checks.
-        [$magicArgs, $values] = ParserHelper::getMagicArgs(
-            $frame,
-            $args,
+        static $magicWords;
+        $magicWords = $magicWords ?? new MagicWordArray([
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT
-        );
+        ]);
 
+        /** @var array $magicArgs */
+        /** @var array $values */
+        [$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
         if (!ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
@@ -328,7 +349,7 @@ class Riven
      * Checks for the existence of a page without tagging it as a Wanted Page.
      *
      * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The template frame in use.
+     * @param PPTemplateFrame_Hash $frame The template frame in use.
      * @param array $args Function arguments:
      *         1: The page to look for.
      *         2: The return value if the page is found.
@@ -341,13 +362,15 @@ class Riven
      */
     public static function doIfExistX(Parser $parser, PPFrame $frame, array $args): array
     {
-        [$magicArgs, $values] = ParserHelper::getMagicArgs(
-            $frame,
-            $args,
+        static $magicWords;
+        $magicWords = $magicWords ?? new MagicWordArray([
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT
-        );
+        ]);
 
+        /** @var array $magicArgs */
+        /** @var array $values */
+        [$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
         if (ParserHelper::checkIfs($frame, $magicArgs)) {
             $titleText = trim($frame->expand($values[0] ?? ''));
             $index = self::existsCommon($parser, Title::newFromText($titleText)) ? 1 : 2;
@@ -364,7 +387,7 @@ class Riven
      * Templates entries.
      *
      * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The template frame in use.
+     * @param PPTemplateFrame_Hash $frame The template frame in use.
      * @param array $args Function arguments:
      *        1+: The names of the templates to include.
      *     debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show even
@@ -377,14 +400,16 @@ class Riven
      */
     public static function doInclude(Parser $parser, PPFrame $frame, array $args): array
     {
-        [$magicArgs, $values] = ParserHelper::getMagicArgs(
-            $frame,
-            $args,
+        static $magicWords;
+        $magicWords = $magicWords ?? new MagicWordArray([
             ParserHelper::NA_DEBUG,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT
-        );
+        ]);
 
+        /** @var array $magicArgs */
+        /** @var array $values */
+        [$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
         if (count($values) <= 0 || !ParserHelper::checkIfs($frame, $magicArgs)) {
             return [''];
         }
@@ -410,7 +435,7 @@ class Riven
      * Randomly picks one or more entries from a list and displays it.
      *
      * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The template frame in use.
+     * @param PPTemplateFrame_Hash $frame The template frame in use.
      * @param array $args Function arguments:
      *             1+: The values to pick from.
      *     allowempty: If set to true, will display empty entries along with separators.
@@ -425,16 +450,18 @@ class Riven
     public static function doPickFrom(Parser $parser, PPFrame $frame, array $args): string
     {
         $parser->addTrackingCategory(self::TRACKING_PICKFROM);
-        [$magicArgs, $values] = ParserHelper::getMagicArgs(
-            $frame,
-            $args,
+        static $magicWords;
+        $magicWords = $magicWords ?? new MagicWordArray([
             self::NA_ALLOWEMPTY,
             self::NA_SEED,
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT,
             ParserHelper::NA_SEPARATOR
-        );
+        ]);
 
+        /** @var array $magicArgs */
+        /** @var array $values */
+        [$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
         $npick = (int)reset($values);
         unset($values[0]);
         if ($npick <= 0 || !count($values) || !ParserHelper::checkIfs($frame, $magicArgs)) {
@@ -470,7 +497,7 @@ class Riven
      * Picks a random number in the range provided.
      *
      * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The template frame in use.
+     * @param PPTemplateFrame_Hash $frame The template frame in use.
      * @param array $args Function arguments:
      *        1: (See return)
      *        2: (See return)
@@ -485,12 +512,12 @@ class Riven
     public static function doRand(Parser $parser, PPFrame $frame, array $args): string
     {
         $parser->addTrackingCategory(self::TRACKING_RAND);
-        [$magicArgs, $values] = ParserHelper::getMagicArgs(
-            $frame,
-            $args,
-            self::NA_SEED
-        );
+        static $magicWords;
+        $magicWords = $magicWords ?? new MagicWordArray([self::NA_SEED]);
 
+        /** @var array $magicArgs */
+        /** @var array $values */
+        [$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
         if (count($values) === 1) {
             $low = 1;
             $high = trim($frame->expand($values[0]));
@@ -533,7 +560,7 @@ class Riven
      * Repetitively calls a template with different parameters for each call.
      *
      * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The template frame in use.
+     * @param PPTemplateFrame_Hash $frame The template frame in use.
      * @param array $args Function arguments:
      *              1: The template to call.
      *              2: The number of parameters to split on.
@@ -551,15 +578,8 @@ class Riven
      */
     public static function doSplitArgs(Parser $parser, PPFrame $frame, array $args)
     {
-        /**
-         * @var PPTemplateFrame_Hash $frame
-         * @var array $magicArgs
-         * @var array $values
-         * @var array $dupes
-         */
-        [$magicArgs, $values, $dupes] = ParserHelper::getMagicArgs(
-            $frame,
-            $args,
+        static $magicWords;
+        $magicWords = $magicWords ?? new MagicWordArray([
             self::NA_ALLOWEMPTY,
             self::NA_DELIMITER,
             self::NA_EXPLODE,
@@ -567,8 +587,11 @@ class Riven
             ParserHelper::NA_IF,
             ParserHelper::NA_IFNOT,
             ParserHelper::NA_SEPARATOR
-        );
+        ]);
 
+        /** @var array $magicArgs */
+        /** @var array $values */
+        [$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
         if (!ParserHelper::checkIfs($frame, $magicArgs)) {
             return '';
         }
@@ -610,14 +633,14 @@ class Riven
             }
         }
 
-        return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, array_merge($named, $dupes), $values);
+        return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, $named, $values);
     }
 
     /**
      * Trims links from a block of text.
      *
      * @param Parser $parser The parser in use.
-     * @param PPFrame $frame The template frame in use.
+     * @param PPTemplateFrame_Hash $frame The template frame in use.
      * @param array $args Function arguments:
      *     mode: The only option currently is "smart", which uses the preprocessor to parse the code with near-perfect
      *           results.
@@ -630,12 +653,11 @@ class Riven
             return ['text' => '', 'noparse' => false];
         }
 
-        [$magicArgs] = ParserHelper::getMagicArgs(
-            $frame,
-            $args,
-            self::NA_MODE
-        );
+        static $magicWords;
+        $magicWords = $magicWords ?? new MagicWordArray([self::NA_MODE]);
 
+        /** @var array $magicArgs */
+        [$magicArgs] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
         $helper = VersionHelper::getInstance();
         if (!ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
             $output = $parser->recursiveTagParse($args[0]);
@@ -656,25 +678,6 @@ class Riven
         $output = $helper->replaceLinkHoldersText($parser, $output);
         $newNode = $preprocessor->preprocessToObj($output, $flag);
         return ['text' => $newNode, 'noparse' => true, 'isChildObj' => true];
-    }
-
-    /**
-     * Initializes all the relevant aspects of Riven.
-     *
-     * @return void;
-     *
-     */
-    public static function init(): void
-    {
-        ParserHelper::cacheMagicWords([
-            self::NA_ALLOWEMPTY,
-            self::NA_CLEANIMG,
-            self::NA_DELIMITER,
-            self::NA_EXPLODE,
-            self::NA_MODE,
-            self::NA_PROTROWS,
-            self::NA_SEED
-        ]);
     }
 
     /**

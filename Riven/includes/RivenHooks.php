@@ -36,7 +36,6 @@ class RivenHooks /* implements
 	{
 		self::initParserFunctions($parser);
 		self::initTagFunctions($parser);
-		Riven::init();
 	}
 
 	/**
