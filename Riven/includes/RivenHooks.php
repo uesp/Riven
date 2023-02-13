@@ -11,6 +11,21 @@
 class RivenHooks /* implements
 	\MediaWiki\Hook\ParserFirstCallInitHook */
 {
+	public const PF_ARG         = 'arg'; // From DynamicFunctions
+	public const PF_EXPLODEARGS = 'explodeargs';
+	public const PF_FINDFIRST   = 'findfirst';
+	public const PF_IFEXISTX    = 'ifexistx';
+	public const PF_INCLUDE     = 'include';
+	public const PF_PICKFROM    = 'pickfrom';
+	public const PF_RAND        = 'rand'; // From DynamicFunctions
+	public const PF_SPLITARGS   = 'splitargs';
+	public const PF_TRIMLINKS   = 'trimlinks';
+
+	public const TG_CLEANSPACE = 'riven-cleanspace';
+	public const TG_CLEANTABLE = 'riven-cleantable';
+
+	public const VR_SKINNAME = 'riven-skinname'; // From DynamicFunctions
+
 	/**
 	 * Register variables.
 	 *
@@ -21,7 +36,7 @@ class RivenHooks /* implements
 	 */
 	public static function onMagicWordwgVariableIDs(array &$aCustomVariableIds): void
 	{
-		$aCustomVariableIds[] = Riven::VR_SKINNAME;
+		$aCustomVariableIds[] = self::VR_SKINNAME;
 	}
 
 	/**
@@ -53,7 +68,7 @@ class RivenHooks /* implements
 	public static function onParserGetVariableValueSwitch(Parser $parser, array &$variableCache, $magicWordId, &$ret, PPFrame $frame): bool
 	{
 		switch ($magicWordId) {
-			case Riven::VR_SKINNAME:
+			case self::VR_SKINNAME:
 				$ret = Riven::doSkinName($parser);
 
 				// Cached, but only for the current request (presumably), since user could change their settings at any
@@ -75,15 +90,15 @@ class RivenHooks /* implements
 	 */
 	private static function initParserFunctions(Parser $parser): void
 	{
-		$parser->setFunctionHook(Riven::PF_ARG, 'Riven::doArg', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(Riven::PF_EXPLODEARGS, 'Riven::doExplodeargs', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(Riven::PF_FINDFIRST, 'Riven::doFindFirst', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(Riven::PF_IFEXISTX, 'Riven::doIfExistX', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(Riven::PF_INCLUDE, 'Riven::doInclude', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(Riven::PF_PICKFROM, 'Riven::doPickFrom', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(Riven::PF_RAND, 'Riven::doRand', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(Riven::PF_SPLITARGS, 'Riven::doSplitargs', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(Riven::PF_TRIMLINKS, 'Riven::doTrimLinks', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_ARG, 'Riven::doArg', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_EXPLODEARGS, 'Riven::doExplodeargs', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_FINDFIRST, 'Riven::doFindFirst', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_IFEXISTX, 'Riven::doIfExistX', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_INCLUDE, 'Riven::doInclude', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_PICKFROM, 'Riven::doPickFrom', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_RAND, 'Riven::doRand', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_SPLITARGS, 'Riven::doSplitargs', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_TRIMLINKS, 'Riven::doTrimLinks', SFH_OBJECT_ARGS);
 	}
 
 	/**
@@ -96,7 +111,7 @@ class RivenHooks /* implements
 	 */
 	private static function initTagFunctions(Parser $parser): void
 	{
-		ParserHelper::setHookSynonyms($parser, Riven::TG_CLEANSPACE, 'Riven::doCleanSpace');
-		ParserHelper::setHookSynonyms($parser, Riven::TG_CLEANTABLE, 'Riven::doCleanTable');
+		ParserHelper::setHookSynonyms($parser, self::TG_CLEANSPACE, 'Riven::doCleanSpace');
+		ParserHelper::setHookSynonyms($parser, self::TG_CLEANTABLE, 'Riven::doCleanTable');
 	}
 }

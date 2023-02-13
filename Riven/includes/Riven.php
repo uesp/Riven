@@ -27,32 +27,12 @@ class Riven
     public const NA_PROTROWS   = 'riven-protectrows';
     public const NA_SEED       = 'riven-seed';
 
-    private const TRACKING_ARG = 'riven-tracking-arg';
+    private const TRACKING_ARG      = 'riven-tracking-arg';
+    private const TRACKING_PICKFROM = 'riven-tracking-pickfrom';
+    private const TRACKING_RAND     = 'riven-tracking-rand';
+    private const TRACKING_SKINNAME = 'riven-tracking-skinname';
 
-    // For whatever reason, MediaWiki did Magic Words differently from everything else, so parser functions are best
-    // off with the "key" being the actual word you intend to use. That's why these ones don't have "riven-" prepended
-    // to them.
-    const PF_ARG         = 'arg'; // From DynamicFunctions
-    const PF_EXPLODEARGS = 'explodeargs';
-    const PF_FINDFIRST   = 'findfirst';
-    const PF_IFEXISTX    = 'ifexistx';
-    const PF_INCLUDE     = 'include';
-    const PF_PICKFROM    = 'pickfrom';
-    const PF_RAND        = 'rand'; // From DynamicFunctions
-    const PF_SPLITARGS   = 'splitargs';
-    const PF_TRIMLINKS   = 'trimlinks';
-
-    const TG_CLEANSPACE = 'riven-cleanspace';
-    const TG_CLEANTABLE = 'riven-cleantable';
-
-    const TRACKING_EXPLODEARGS = 'riven-tracking-explodeargs';
-    const TRACKING_PICKFROM    = 'riven-tracking-pickfrom';
-    const TRACKING_RAND        = 'riven-tracking-rand';
-    const TRACKING_SKINNAME    = 'riven-tracking-skinname';
-
-    const VR_SKINNAME = 'riven-skinname'; // From DynamicFunctions
-
-    const TAG_REGEX = '</?[0-9A-Za-z]+(\s[^>]*)?>';
+    private const TAG_REGEX = '</?[0-9A-Za-z]+(\s[^>]*)?>';
 
     /**
      * Retrieves an argument from the URL.
@@ -185,13 +165,8 @@ class Riven
         static $magicWords;
         $magicWords = $magicWords ?? new MagicWordArray([
             ParserHelper::NA_DEBUG,
-            self::NA_ALLOWEMPTY,
             self::NA_CLEANIMG,
-            self::NA_DELIMITER,
-            self::NA_EXPLODE,
-            self::NA_MODE,
-            self::NA_PROTROWS,
-            self::NA_SEED
+            self::NA_PROTROWS
         ]);
 
         #RHshow('Pre-transform', $attributes);
