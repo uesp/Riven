@@ -645,13 +645,12 @@ class Riven
 		// This was a lot simpler in the original implementation, working strictly by recursively parsing the root
 		// node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
 		// necessitating this mess...which is still better than trying to create a new node structure.
-		$preprocessor = new Preprocessor_Hash($parser);
 		$flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
-		$rootNode = $preprocessor->preprocessToObj($args[0], $flag);
+		$rootNode = $parser->preprocessToDom($args[0], $flag);
 		$output = self::trimLinksParseNode($parser, $frame, $rootNode);
 		$output = $helper->getStripState($parser)->unstripBoth($output);
 		$output = $helper->replaceLinkHoldersText($parser, $output);
-		$newNode = $preprocessor->preprocessToObj($output, $flag);
+		$newNode = $parser->preprocessToDom($output, $flag);
 		return ['text' => $newNode, 'noparse' => true, 'isChildObj' => true];
 	}
 
@@ -901,7 +900,7 @@ class Riven
 	 */
 	private static function cleanSpacePP(Parser $parser, PPFrame $frame, $text): string
 	{
-		$rootNode = $parser->getPreprocessor()->preprocessToObj($text);
+		$rootNode = $parser->preprocessToDom($text);
 		return self::cleanSpaceNode($frame, $rootNode);
 	}
 
