@@ -1156,10 +1156,6 @@ class Riven
 		// show("Output:\n", $output);
 
 		$debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
-		$output = $parser->preprocessToDom($output);
-		// Some templates are parsed even inside pre tags, so use RECOVER_ORIG to ensure that templates and the like
-		$output = $parent->expand($output, PPFrame::RECOVER_ORIG);
-
 		return ParserHelper::formatPFForDebug($output, $debug);
 	}
 
