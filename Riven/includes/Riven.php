@@ -528,6 +528,7 @@ class Riven
 	public static function doSkinName(Parser $parser): string
 	{
 		$parser->addTrackingCategory(self::TRACKING_SKINNAME);
+		$parser->getOutput()->updateCacheExpiry(0);
 		return RequestContext::getMain()->getSkin()->getSkinName();
 	}
 
