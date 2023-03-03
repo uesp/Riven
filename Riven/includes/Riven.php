@@ -95,27 +95,27 @@ class Riven
 		$match = $modeWords->matchStartToEnd($args[self::NA_MODE] ?? self::AV_ORIGINAL);
 		$modeWord = $match === false ? self::AV_ORIGINAL : $match;
 
-		$output = $content;
+		$retval = $content;
 		if ($modeWord !== self::AV_ORIGINAL) {
-			$output = preg_replace('#<!--.*?-->#s', '', $output);
+			$retval = preg_replace('#<!--.*?-->#s', '', $retval);
 		}
 
-		$output = trim($output);
+		$retval = trim($retval);
 		switch ($modeWord) {
 				/*
             case self::AV_RECURSIVE:
-                $output = self::cleanSpacePP($output, $parser, $frame, true);
+                $retval = self::cleanSpacePP($retval, $parser, $frame, true);
                 break; */
 			case self::AV_TOP:
-				$output = self::cleanSpacePP($parser, $frame, $output);
+				$retval = self::cleanSpacePP($parser, $frame, $retval);
 				break;
 			default:
-				$output = self::cleanSpaceOriginal($output);
+				$retval = self::cleanSpaceOriginal($retval);
 				break;
 		}
 
 		if (ParserHelper::checkDebugMagic($parser, $frame, $args)) {
-			return ParserHelper::formatTagForDebug($output, true);
+			return ParserHelper::formatTagForDebug($retval, true);
 		}
 
 		// Categories and trails are stripped on ''any'' template page, not just when directly calling the template
@@ -123,14 +123,14 @@ class Riven
 		if ($parser->getTitle()->getNamespace() === NS_TEMPLATE) {
 			// save categories before processing
 			$precats = $parser->getOutput()->getCategories();
-			$output = $parser->recursiveTagParse($output, $frame);
+			$retval = $parser->recursiveTagParse($retval, $frame);
 			// reset categories to the pre-processing list to remove any new categories
 			$parser->getOutput()->setCategoryLinks($precats);
-			return $output;
+			return $retval;
 		}
 
-		$output = $parser->recursiveTagParse($output, $frame);
-		return $output;
+		$retval = $parser->recursiveTagParse($retval, $frame);
+		return $retval;
 	}
 
 	/**
@@ -646,7 +646,7 @@ class Riven
 		// This was a lot simpler in the original implementation, working strictly by recursively parsing the root
 		// node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
 		// necessitating this mess...which is still better than trying to create a new node structure.
-		$flag = $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
+		$flag = Parser::PTD_FOR_INCLUSION; // was: $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
 		$rootNode = $parser->preprocessToDom($args[0], $flag);
 		$output = self::trimLinksParseNode($parser, $frame, $rootNode);
 		$output = $helper->getStripState($parser)->unstripBoth($output);
@@ -962,7 +962,7 @@ class Riven
 	 * @return array A string[] containing the individual template calls that #splitargs splits into.
 	 *
 	 */
-	private static function getTemplates(PPTemplateFrame_Hash $parent, string $templateName, int $nargs, array $values, array $named, bool $allowEmpty): array
+	private static function getTemplates(PPFrame $parent, string $templateName, int $nargs, array $values, array $named, bool $allowEmpty): array
 	{
 		if (!$nargs) {
 			$nargs = count($values);
@@ -1128,7 +1128,7 @@ class Riven
 	 * Takes the input from the various forms of #splitargs and returns it as a cohesive set of variables.
 	 *
 	 * @param Parser $parser The parser in use.
-	 * @param PPTemplateFrame_Hash $frame The template frame in use.
+	 * @param PPFrame $frame The template frame in use.
 	 * @param array $magicArgs The template arguments that contain a recognized keyword for the function in string key/PPNode value format.
 	 * @param string $templateName The name of the template.
 	 * @param int $nargs The number of arguments to split parameters into.
@@ -1138,7 +1138,7 @@ class Riven
 	 * @return mixed The text of all the function calls.
 	 *
 	 */
-	private static function splitArgsCommon(Parser $parser, PPTemplateFrame_Hash $frame, array $magicArgs, string $templateName, int $nargs, array $named, array $values): array
+	private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $magicArgs, string $templateName, int $nargs, array $named, array $values): array
 	{
 		$parent = $frame->parent ?? $frame;
 		if ($nargs < 1 || empty($templateName)) {
