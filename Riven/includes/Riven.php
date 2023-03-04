@@ -150,7 +150,7 @@ class Riven
 	 */
 	public static function doCleanTable(string $content, array $attributes, Parser $parser, PPFrame $frame): array
 	{
-		#RHshow('doCleanTable wiki text', $text);
+		#RHshow('doCleanTable wiki text', $content);
 
 		// This ensures that tables are not cleaned if being displayed directly on the Template page.
 		// Previewing will process cleantable normally.
@@ -276,7 +276,7 @@ class Riven
 	 */
 	public static function doFindFirst(Parser $parser, PPFrame $frame, array $args): string
 	{
-		// This is just a loop over the core of #ifexistsx. Timing tests on other methods have so far failed thanks to
+		// This is just a loop over the core of #ifexistx. Timing tests on other methods have so far failed thanks to
 		// the existing cache mechanisms behind title checks.
 		static $magicWords;
 		$magicWords = $magicWords ?? new MagicWordArray([
@@ -643,7 +643,6 @@ class Riven
 			$output = preg_replace('#<a\ href=[^>]+ title="(.*?)"><img\ [^>]+></a>#', '\1', $output);
 			$output = preg_replace('#<a\ href=[^>]+ title="[^"]*?">(.+?)</a>#', '\1', $output);
 			$output = preg_replace('#<a\ href=[^>]+>(<img\ [^>]+>)?</a>#', '', $output);
-			$output = "<nowiki/>$output<nowiki/>";
 		} else {
 			/** @todo Have another look at this. The original approach may actually be doable. */
 			// This was a lot simpler in the original implementation, working strictly by recursively parsing the root
@@ -1174,7 +1173,6 @@ class Riven
 	 */
 	private static function trimLinksParseNode(Parser $parser, PPFrame $frame, PPNode $node): string
 	{
-		RHshow('Entry', $frame->expand($node));
 		if (self::isLink($node)) {
 			// show($node->value);
 			$close = strrpos($node->value, ']]');
@@ -1214,7 +1212,6 @@ class Riven
 				}
 			}
 
-			RHshow('Is Link', $frame->expand($node));
 			return $frame->expand($node);
 		} elseif ($node instanceof PPNode_Hash_Tree) {
 			$child = $node->getFirstChild();
@@ -1224,14 +1221,11 @@ class Riven
 				$child = $child->getNextSibling();
 			}
 
-			RHshow('Hash Tree', $output);
 			return $output;
 		} elseif ($node instanceof PPNode_Hash_Text) {
-			RHshow('Hash Text', $node->value);
 			return $node->value;
 		}
 
-		RHshow('Expand', $frame->expand($node));
 		return $frame->expand($node);
 	}
 }
