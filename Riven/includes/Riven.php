@@ -179,7 +179,7 @@ class Riven
 		$offset = 0;
 		$output = '';
 		$lastVal = null;
-		$protectRows = intval($attributes[self::NA_PROTROWS] ?? 1);
+		$protectRows = intval($attributes[self::NA_PROTROWS] ?? 0);
 		$cleanImages = intval($attributes[self::NA_CLEANIMG] ?? 1);
 		do {
 			$lastVal = self::parseTable($parser, $text, $offset, $protectRows, $cleanImages);
@@ -640,6 +640,8 @@ class Riven
 		if (!ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
 			$output = $parser->replaceInternalLinks($output);
 			$output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
+			$output = preg_replace('#<a\ href=[^>]+ title="(.*?)"><img\ [^>]+></a>#', '\1', $output);
+			$output = preg_replace('#<a\ href=[^>]+ title="[^"]*?">(.+?)</a>#', '\1', $output);
 			$output = preg_replace('#<a\ href=[^>]+>(<img\ [^>]+>)?</a>#', '', $output);
 			$output = "<nowiki/>$output<nowiki/>";
 		} else {
@@ -719,7 +721,7 @@ class Riven
 	 * back to the home cell.
 	 *
 	 */
-	private static function cleanRows(string $input, int $protectRows = 1, bool $cleanImages = true): string
+	private static function cleanRows(string $input, int $protectRows, bool $cleanImages): string
 	{
 		#RHshow('Clean Rows In', $input);
 		$map = self::buildMap($input);
@@ -1172,9 +1174,10 @@ class Riven
 	 */
 	private static function trimLinksParseNode(Parser $parser, PPFrame $frame, PPNode $node): string
 	{
+		RHshow('Entry', $frame->expand($node));
 		if (self::isLink($node)) {
 			// show($node->value);
-			$close = strpos($node->value, ']]');
+			$close = strrpos($node->value, ']]');
 			$link = substr($node->value, 2, $close - 2);
 			$split = explode('|', $link, 2);
 			$titleText = trim($split[0]);
@@ -1188,18 +1191,30 @@ class Riven
 				}
 			}
 
-			if ($leadingColon || (!$title->isExternal() && !in_array($ns, [NS_CATEGORY, NS_FILE, NS_MEDIA, NS_SPECIAL]))) {
-				$after = substr($node->value, $close + 2);
-				if (isset($split[1])) {
+			if ($leadingColon || !$title->isExternal()) {
+				if (in_array($ns, [NS_FILE, NS_MEDIA])) {
+					$after = substr($node->value, $close + 2);
+					$subText = $split[1] ?? null;
+					if (!is_null($subText)) {
+						$subDom = $parser->preprocessToDom($subText);
+						$subText = self::trimLinksParseNode($parser, $frame, $subDom);
+						// If display text was provided, preserve formatting but put self-closed nowikis at each end to break any accidental formatting that results.
+						return "[[$title|$subText]]$after";
+					}
+				} elseif (!in_array($ns, [NS_CATEGORY, NS_SPECIAL])) {
+					$after = substr($node->value, $close + 2);
+					$subText = $split[1] ?? null;
+					if (is_null($subText)) {
+						// For title-only links, formatting should not be applied at all, so just surround the entire thing with nowiki tags.
+						$subText = $title ? $title->getPrefixedText() : $titleText;
+					}
+
 					// If display text was provided, preserve formatting but put self-closed nowikis at each end to break any accidental formatting that results.
-					return "<nowiki/>{$split[1]}<nowiki/>$after";
-				} else {
-					// For title-only links, formatting should not be applied at all, so just surround the entire thing with nowiki tags.
-					$text = $title ? $title->getPrefixedText() : $titleText;
-					return "<nowiki/>$text<nowiki/>$after";
+					return "<nowiki/>$subText<nowiki/>$after";
 				}
 			}
 
+			RHshow('Is Link', $frame->expand($node));
 			return $frame->expand($node);
 		} elseif ($node instanceof PPNode_Hash_Tree) {
 			$child = $node->getFirstChild();
@@ -1209,13 +1224,14 @@ class Riven
 				$child = $child->getNextSibling();
 			}
 
+			RHshow('Hash Tree', $output);
 			return $output;
 		} elseif ($node instanceof PPNode_Hash_Text) {
+			RHshow('Hash Text', $node->value);
 			return $node->value;
-		} elseif ($node instanceof PPNode_Hash_Attr) {
-			return $frame->expand($node);
 		}
 
+		RHshow('Expand', $frame->expand($node));
 		return $frame->expand($node);
 	}
 }
