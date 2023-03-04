@@ -631,28 +631,32 @@ class Riven
 
 		static $magicWords;
 		$magicWords = $magicWords ?? new MagicWordArray([self::NA_MODE]);
+		$flag = Parser::PTD_FOR_INCLUSION; // was: $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
 
 		/** @var array $magicArgs */
-		[$magicArgs] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
+		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
 		$helper = VersionHelper::getInstance();
+		$output = $frame->expand($values[0]);
 		if (!ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
-			$output = $parser->recursiveTagParse($args[0]);
+			RHshow('Output', $output);
+			$output = $parser->replaceInternalLinks($output);
+			RHshow('Output', $output);
 			$output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
-			$output = $helper->replaceLinkHoldersText($parser, $output);
-			return ['text' => $output, 'noparse' => false];
+			$output = preg_replace('#<a\ href=[^>]+>(<img\ [^>]+>)?</a>#', '', $output);
+			$output = "<nowiki/>$output<nowiki/>";
+		} else {
+			/** @todo Have another look at this. The original approach may actually be doable. */
+			// This was a lot simpler in the original implementation, working strictly by recursively parsing the root
+			// node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
+			// necessitating this mess...which is still better than trying to create a new node structure.
+			$rootNode = $parser->preprocessToDom($output, $flag);
+			$output = self::trimLinksParseNode($parser, $frame, $rootNode);
+			$output = $helper->getStripState($parser)->unstripBoth($output);
 		}
 
-		// TODO: Have another look at this. The original approach may actually be doable.
-		// This was a lot simpler in the original implementation, working strictly by recursively parsing the root
-		// node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
-		// necessitating this mess...which is still better than trying to create a new node structure.
-		$flag = Parser::PTD_FOR_INCLUSION; // was: $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
-		$rootNode = $parser->preprocessToDom($args[0], $flag);
-		$output = self::trimLinksParseNode($parser, $frame, $rootNode);
-		$output = $helper->getStripState($parser)->unstripBoth($output);
 		$output = $helper->replaceLinkHoldersText($parser, $output);
-		$newNode = $parser->preprocessToDom($output, $flag);
-		return ['text' => $newNode, 'noparse' => true, 'isChildObj' => true];
+		RHshow('FInal', $output);
+		return ['text' => $output, 'noparse' => false, 'preprocessFlags' => $flag];
 	}
 
 	/**
