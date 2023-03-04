@@ -335,7 +335,7 @@ class Riven
 	 * @return array The result of the check or an empty string if the if/ifnot failed.
 	 *
 	 */
-	public static function doIfExistX(Parser $parser, PPFrame $frame, array $args): array
+	public static function doIfExistX(Parser $parser, PPFrame $frame, array $args): string
 	{
 		static $magicWords;
 		$magicWords = $magicWords ?? new MagicWordArray([
@@ -346,15 +346,15 @@ class Riven
 		/** @var array $magicArgs */
 		/** @var array $values */
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
-		if (ParserHelper::checkIfs($frame, $magicArgs)) {
-			$titleText = trim($frame->expand($values[0] ?? ''));
-			$index = self::existsCommon($parser, Title::newFromText($titleText)) ? 1 : 2;
-			$retval = $values[$index] ?? '';
-		} else {
-			$retval = '';
+		if (!ParserHelper::checkIfs($frame, $magicArgs)) {
+			return '';
 		}
 
-		return ['text' => $retval, 'noparse' => true, 'isChildObj' => true];
+		$titleText = trim($frame->expand($values[0] ?? ''));
+		$index = self::existsCommon($parser, Title::newFromText($titleText)) ? 1 : 2;
+		return isset($values[$index])
+			? $frame->expand($values[$index])
+			: '';
 	}
 
 	/**
