@@ -589,24 +589,29 @@ class Riven
 			// Explode
 			$delimiter = $magicArgs[self::NA_DELIMITER] ?? ',';
 			$values = explode($delimiter, $magicArgs[self::NA_EXPLODE]);
+		} elseif (count($values) > 2) {
+			$values = array_slice($values, 2);
 		} else {
-			if (count($values) > 2) {
-				$values = array_slice($values, 2);
-			} else {
-				// This bypasses the various getArgument() routines which all use the template expansion cache. We
-				// can't use that or else we get things like {{!}} being turned into |. This also ensures that if we're
-				// calling a template or sub-template that has effects, they all get the unparsed values.
-				$values = $frame->numberedArgs;
-				foreach ($frame->namedArgs as $key => $value) {
-					if ((int)$key > 0) {
-						$values[$key] = $value;
-					}
+			// This used to use direct $frame->numberedArgs directly, but this was a problem with the old
+			// MetaTemplate, so reverted to getNumberedArguments() and getNamedArguments() for now. It's probably
+			// better that it remain that way. Note below is assuming the direct-access method, but it's unclear if
+			// the purported benefits are real, now that I understand what's going on a bit more with {{!}} vs.
+			// {{Pipe}}. Needs further investigation.
+			//
+			// This bypasses the various getArgument() routines which all use the template expansion cache. We
+			// can't use that or else we get things like {{!}} being turned into |. This also ensures that if we're
+			// calling a template or sub-template that has effects, they all get the unparsed values.
+			$values = $frame->getNumberedArguments();
+			foreach ($frame->getNamedArguments() as $key => $value) {
+				$key = (int)$key;
+				if ($key > 0 && !isset($values[$key])) {
+					$values[$key] = $value;
 				}
-
-				ksort($values, SORT_NUMERIC);
-				$values = array_values($values);
-				#RHecho($values);
 			}
+
+			ksort($values, SORT_NUMERIC);
+			$values = array_values($values);
+			#RHecho($values);
 		}
 
 		return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, $named, $values);
