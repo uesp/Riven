@@ -638,9 +638,7 @@ class Riven
 		$helper = VersionHelper::getInstance();
 		$output = $frame->expand($values[0]);
 		if (!ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
-			RHshow('Output', $output);
 			$output = $parser->replaceInternalLinks($output);
-			RHshow('Output', $output);
 			$output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
 			$output = preg_replace('#<a\ href=[^>]+>(<img\ [^>]+>)?</a>#', '', $output);
 			$output = "<nowiki/>$output<nowiki/>";
@@ -655,7 +653,6 @@ class Riven
 		}
 
 		$output = $helper->replaceLinkHoldersText($parser, $output);
-		RHshow('FInal', $output);
 		return ['text' => $output, 'noparse' => false, 'preprocessFlags' => $flag];
 	}
 
