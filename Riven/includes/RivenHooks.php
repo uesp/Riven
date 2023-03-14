@@ -21,10 +21,10 @@ class RivenHooks /* implements
 	public const PF_SPLITARGS   = 'splitargs';
 	public const PF_TRIMLINKS   = 'trimlinks';
 
-	public const TG_CLEANSPACE = 'riven-cleanspace';
-	public const TG_CLEANTABLE = 'riven-cleantable';
+	public const TG_CLEANSPACE = 'cleanspace';
+	public const TG_CLEANTABLE = 'cleantable';
 
-	public const VR_SKINNAME = 'riven-skinname'; // From DynamicFunctions
+	public const VR_SKINNAME = 'skinname'; // From DynamicFunctions
 
 	/**
 	 * Register variables.
@@ -49,6 +49,16 @@ class RivenHooks /* implements
 	 */
 	public static function onParserFirstCallInit(Parser $parser): void
 	{
+		/* Force parser to use Preprocessor_Hash, if it isn't already, since this entire extension is predicated on
+		 * that assumption. In later versions, Preprocessor_Hash is the only built-in option anyway. This should work
+		 * up to 1.35. In 1.36, they change mPreprocessor to private. At that point, we can probably override this
+		 * through reflection. It doesn't look like there are any other options, since even in a derived class, we
+		 * can't set the private mPreprocessor property.
+		 */
+		if ($parser->mPreprocessor instanceof PPNode_DOM) {
+			$parser->mPreprocessor = new Preprocessor_Hash($parser);
+		}
+
 		self::initParserFunctions($parser);
 		self::initTagFunctions($parser);
 	}

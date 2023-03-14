@@ -601,10 +601,9 @@ class Riven
 			// This bypasses the various getArgument() routines which all use the template expansion cache. We
 			// can't use that or else we get things like {{!}} being turned into |. This also ensures that if we're
 			// calling a template or sub-template that has effects, they all get the unparsed values.
-			$values = $frame->getNumberedArguments();
-			foreach ($frame->getNamedArguments() as $key => $value) {
-				$key = (int)$key;
-				if ($key > 0 && !isset($values[$key])) {
+			$values = $frame->numberedArgs;
+			foreach ($frame->namedArgs as $key => $value) {
+				if ((int)$key > 0) {
 					$values[$key] = $value;
 				}
 			}
@@ -642,13 +641,7 @@ class Riven
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
 		$helper = VersionHelper::getInstance();
 		$output = $frame->expand($values[0]);
-		if (!ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
-			$output = $parser->replaceInternalLinks($output);
-			$output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
-			$output = preg_replace('#<a\ href=[^>]+ title="(.*?)"><img\ [^>]+></a>#', '\1', $output);
-			$output = preg_replace('#<a\ href=[^>]+ title="[^"]*?">(.+?)</a>#', '\1', $output);
-			$output = preg_replace('#<a\ href=[^>]+>(<img\ [^>]+>)?</a>#', '', $output);
-		} else {
+		if (ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
 			/** @todo Have another look at this. The original approach may actually be doable. */
 			// This was a lot simpler in the original implementation, working strictly by recursively parsing the root
 			// node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
@@ -656,6 +649,13 @@ class Riven
 			$rootNode = $parser->preprocessToDom($output, $flag);
 			$output = self::trimLinksParseNode($parser, $frame, $rootNode);
 			$output = $helper->getStripState($parser)->unstripBoth($output);
+		} else {
+			$output = $parser->replaceInternalLinks($output);
+			$output = $helper->getStripState($parser)->unstripBoth($output);
+			$output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
+			$output = preg_replace('#<a\ href=[^>]+ title="(.*?)"><img\ [^>]+></a>#', '\1', $output);
+			$output = preg_replace('#<a\ href=[^>]+ title="[^"]*?">(.+?)</a>#', '\1', $output);
+			$output = preg_replace('#<a\ href=[^>]+>(<img\ [^>]+>)?</a>#', '', $output);
 		}
 
 		$output = $helper->replaceLinkHoldersText($parser, $output);
@@ -969,7 +969,7 @@ class Riven
 	 * @return array A string[] containing the individual template calls that #splitargs splits into.
 	 *
 	 */
-	private static function getTemplates(PPFrame $parent, string $templateName, int $nargs, array $values, array $named, bool $allowEmpty): array
+	private static function getTemplates(PPFrame $frame, string $templateName, int $nargs, array $values, array $named, bool $allowEmpty): array
 	{
 		if (!$nargs) {
 			$nargs = count($values);
@@ -982,7 +982,7 @@ class Riven
 		$templates = [];
 		$namedParameters = '';
 		foreach ($named as $name => $value) {
-			$value = $parent->expand($value, PPFrame::RECOVER_ORIG);
+			$value = $frame->expand($value);
 			$namedParameters .= "|$name=$value";
 		}
 
@@ -994,7 +994,7 @@ class Riven
 				$value = $values[$index + $paramNum] ?? null;
 				if (!is_null($value)) {
 					if ($value instanceof PPNode) {
-						$value = $parent->expand($value, PPFrame::RECOVER_ORIG);
+						$value = $frame->expand($value, PPFrame::RECOVER_ORIG);
 					}
 
 					// Unlike normal templates, we strip off spacing even for numbered arguments, so groups can be
@@ -1147,13 +1147,12 @@ class Riven
 	 */
 	private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $magicArgs, string $templateName, int $nargs, array $named, array $values): array
 	{
-		$parent = $frame->parent ?? $frame;
 		if ($nargs < 1 || empty($templateName)) {
 			return [''];
 		}
 
 		$allowEmpty = $magicArgs[self::NA_ALLOWEMPTY] ?? false;
-		$templates = self::getTemplates($parent, $templateName, $nargs, $values, $named, $allowEmpty);
+		$templates = self::getTemplates($frame, $templateName, $nargs, $values, $named, $allowEmpty);
 		if (empty($templates)) {
 			return [''];
 		}
