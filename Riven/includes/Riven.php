@@ -247,15 +247,15 @@ class Riven
 			return '';
 		}
 
-		$templateName = $frame->expand($values[0]);
-		$nargs = intval($frame->expand($values[1]));
+		$templateName = trim($frame->expand($values[0]));
+		$nargs = intval(trim($frame->expand($values[1])));
 		$delimiter = $frame->expand(
 			isset($values[3])
 				? $values[3]
 				: $magicArgs[self::NA_DELIMITER] ?? ','
 		);
 
-		$values = explode($delimiter, $frame->expand($values[2]));
+		$values = explode($delimiter, trim($frame->expand($values[2])));
 
 		// show($values);
 		return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, $named, $values);
@@ -353,7 +353,7 @@ class Riven
 		$titleText = trim($frame->expand($values[0] ?? ''));
 		$index = self::existsCommon($parser, Title::newFromText($titleText)) ? 1 : 2;
 		return isset($values[$index])
-			? $frame->expand($values[$index])
+			? trim($frame->expand($values[$index]))
 			: '';
 	}
 
@@ -437,8 +437,11 @@ class Riven
 		/** @var array $magicArgs */
 		/** @var array $values */
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
-		$npick = (int)reset($values);
-		unset($values[0]);
+		if (count($values) > 0) {
+			$npick = (int)trim($values[0]);
+			unset($values[0]);
+		}
+
 		if ($npick <= 0 || !count($values) || !ParserHelper::checkIfs($frame, $magicArgs)) {
 			return '';
 		}
@@ -501,8 +504,8 @@ class Riven
 			$high = trim($frame->expand($values[1]));
 		}
 
-		$low = strlen($low) ? intval($low) : 1;
-		$high = strlen($high) ? intval($high) : 6;
+		$low = strlen($low) ? (int)$low : 1;
+		$high = strlen($high) ? (int)$high : 6;
 		if ($low == $high) {
 			return $low;
 		}
@@ -640,7 +643,7 @@ class Riven
 		/** @var array $magicArgs */
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
 		$helper = VersionHelper::getInstance();
-		$output = $frame->expand($values[0]);
+		$output = trim($frame->expand($values[0]));
 		if (ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
 			/** @todo Have another look at this. The original approach may actually be doable. */
 			// This was a lot simpler in the original implementation, working strictly by recursively parsing the root
@@ -994,7 +997,7 @@ class Riven
 				$value = $values[$index + $paramNum] ?? null;
 				if (!is_null($value)) {
 					if ($value instanceof PPNode) {
-						$value = $frame->expand($value, PPFrame::RECOVER_ORIG);
+						$value = trim($frame->expand($value, PPFrame::RECOVER_ORIG));
 					}
 
 					// Unlike normal templates, we strip off spacing even for numbered arguments, so groups can be
