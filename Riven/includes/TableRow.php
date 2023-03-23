@@ -14,7 +14,7 @@ class TableRow
 	/**
 	 * The cells in the row.
 	 *
-	 * @var array
+	 * @var TableCell[] $cells
 	 */
 	public $cells = [];
 

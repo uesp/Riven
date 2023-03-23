@@ -731,7 +731,7 @@ class Riven
 	/**
 	 * Removes emptry rows from the output.
 	 *
-	 * @param string $input The text to work on.
+	 * @param TableRow[] $map The table map to work on.
 	 * @param int $protectRows The number of rows to protect at the top of the table.
 	 * @param bool $cleanImages Whether to clean images in cells that aren't headers.
 	 *
@@ -739,15 +739,14 @@ class Riven
 	 * back to the home cell.
 	 *
 	 */
-	private static function cleanRows(string $input, int $protectRows, bool $cleanImages): string
+	private static function cleanRows(array $map, int $protectRows, bool $cleanImages): string
 	{
 		#RHshow('Clean Rows In', $input);
-		$map = self::buildMap($input);
-		#RHecho($map);
 		$sectionHasContent = false;
 		$contentRows = false;
+		// Do not clean single-row subtables which are almost certainly used for formatting.
+		$prefixLen = strlen(Parser::MARKER_PREFIX);
 		for ($rowNum = count($map) - 1; $rowNum >= $protectRows; $rowNum--) {
-			/** @var TableRow $row */
 			$row = $map[$rowNum];
 			$rowHasContent = false;
 			$rowHasImageOnlyCells = false;
@@ -755,8 +754,6 @@ class Riven
 			$allHeaders = true;
 			/** @var TableCell[] $spans */
 			$spans = [];
-
-			/** @var TableCell $cell */
 			foreach ($row->cells as $cell) {
 				#RHecho($cell);
 				$content = trim(html_entity_decode($cell->getContent()));
@@ -772,33 +769,41 @@ class Riven
 					}
 
 					$content = trim($content);
-					if (strlen($content) == 0) {
-						if ($initialCount > 0) {
-							$rowHasImageOnlyCells = true;
-						}
-					} else {
-						#RHecho('\'', $content, '\'');
-						$rowHasNonImageCells |= !$cell->getIsHeader();
-					}
+					$rowHasImageOnlyCells |= $initialCount && !strlen($content);
+				} else {
+					$count = 0;
+				}
+
+				if (strlen($content)) {
+					#RHecho('\'', $content, '\'');
+					$rowHasNonImageCells |= !$cell->getIsHeader();
 				}
 
 				// Remove unassigned {{{parameter values}}}
 				$content = preg_replace('#\{{3}[^\}]+\}{3}#', '', $content, -1, $count);
 				while ($count > 0) {
-					// Removes any content-free open/close tags that used to surround the removed text.
+					// Removes any content-free open/close tags that used to surround the removed value.
 					$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $count);
 				}
 
 				$content = trim($content);
-				$rowHasContent |= strlen($content) > 0 && !$cell->getIsHeader();
+
+				// If the cell has content and either it's a non-header cell OR it has a strip-item (which must be an embedded table at this point), then it shouldn't be stripped.
+				$rowHasContent |= strlen($content) && !$cell->getIsHeader();
+				if (!$rowHasContent) {
+					$startPos = strpos($content, Parser::MARKER_PREFIX);
+					if ($startPos !== false) {
+						$rowHasContent = ($startPos >= 0) && strpos($content, Parser::MARKER_SUFFIX, $startPos + $prefixLen) >= 0;
+					}
+				}
+
 				$allHeaders &= $cell->getIsHeader();
 				if ($cell->getParent()) {
 					$spans[] = $cell->getParent();
 				}
 			}
 
-			#RHshow('Row ' . $rowNum . ' (' . $rowHasContent ? 'has content' : 'no content' . ')', $row);
-			$rowHasContent |= $rowHasImageOnlyCells && !$rowHasNonImageCells;
+			$rowHasContent |= ($rowHasImageOnlyCells && !$rowHasNonImageCells);
 			$sectionHasContent |= $rowHasContent;
 			if ($allHeaders) {
 				// Rownum/protectrow check is a apecial allowance for the top-most header being the only row left in the
