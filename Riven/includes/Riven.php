@@ -243,21 +243,17 @@ class Riven
 		 * @var array $values
 		 */
 		[$named, $values] = ParserHelper::splitNamedArgs($frame, $values);
-		if (count($values) < 3 || !isset($values[1])) {
-			return '';
-		}
-
-		$templateName = trim($frame->expand($values[0]));
-		$nargs = intval(trim($frame->expand($values[1])));
+		$templateName = trim($frame->expand($values[0] ?? ''));
+		$nargs = (int)trim($frame->expand($values[1] ?? '0'));
 		$delimiter = $frame->expand(
 			isset($values[3])
 				? $values[3]
 				: $magicArgs[self::NA_DELIMITER] ?? ','
 		);
 
-		$values = explode($delimiter, trim($frame->expand($values[2])));
-
-		// show($values);
+		$values = explode($delimiter, trim($frame->expand($values[2] ?? '')));
+		#RHshow('Explode Named', $named);
+		#RHshow('Explode Values', $values);
 		return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, $named, $values);
 	}
 
@@ -582,40 +578,55 @@ class Riven
 		}
 
 		// Figure out what we're dealing with and populate appropriately.
-		$templateName = $frame->expand($values[0]);
-		if (empty($templateName)) {
-			return '';
-		}
-
-		$nargs = intval($frame->expand($values[1]));
+		$templateName = $frame->expand($values[0] ?? '');
+		$nargs = (int)($frame->expand($values[1] ?? '0'));
 		if (isset($magicArgs[self::NA_EXPLODE])) {
 			// Explode
+			#RHecho('Split Explode');
 			$delimiter = $magicArgs[self::NA_DELIMITER] ?? ',';
 			$values = explode($delimiter, $magicArgs[self::NA_EXPLODE]);
 		} elseif (count($values) > 2) {
-			$values = array_slice($values, 2);
+			#RHecho('Split Args');
+			$slicedValues = array_slice($values, 2);
+			$values = [];
+			foreach ($slicedValues as $value) {
+				$values[] = trim($frame->expand($value));
+			}
 		} else {
-			// This used to use direct $frame->numberedArgs directly, but this was a problem with the old
-			// MetaTemplate, so reverted to getNumberedArguments() and getNamedArguments() for now. It's probably
-			// better that it remain that way. Note below is assuming the direct-access method, but it's unclear if
-			// the purported benefits are real, now that I understand what's going on a bit more with {{!}} vs.
-			// {{Pipe}}. Needs further investigation.
-			//
-			// This bypasses the various getArgument() routines which all use the template expansion cache. We
-			// can't use that or else we get things like {{!}} being turned into |. This also ensures that if we're
-			// calling a template or sub-template that has effects, they all get the unparsed values.
-			$values = $frame->numberedArgs;
-			foreach ($frame->namedArgs as $key => $value) {
-				if ((int)$key > 0) {
-					$values[$key] = $value;
+			#RHecho('Split Frame');
+			$values = [];
+			if (class_exists('MetaTemplate_body')) {
+				// MetaTemplate v1 doesn't guarantee that DOM and cached values will be the same, so we have to use the
+				// cached values, but this creates problems with embedded tables and other special formatting, so we
+				// don't use it generally.
+				foreach ($frame->getNumberedArguments() as $key => $value) {
+					$values[$key - 1] = $value;
+				}
+
+				foreach ($frame->getNamedArguments() as $key => $value) {
+					$intKey = (int)$key;
+					if ($intKey > 0 && !isset($values[$intKey])) {
+						$values[$intKey - 1] = $value; // -1 because values is 0-based
+					}
+				}
+			} else {
+				// For MetaTemplate 2, DOM and cache should match, so we take DOM values and parse them, leaving
+				// templates as text so that {{!}} and other such things work as expected.
+				foreach ($frame->numberedArgs as $key => $value) {
+					$values[$key - 1] = $frame->expand($value, PPFrame::NO_TEMPLATES);
+				}
+
+				foreach ($frame->namedArgs as $key => $value) {
+					$intKey = (int)$key;
+					if ($intKey > 0 && !isset($values[$intKey])) {
+						$values[$intKey - 1] = $frame->expand($value, PPFrame::NO_TEMPLATES); // -1 because values is 0-based
+					}
 				}
 			}
-
-			ksort($values, SORT_NUMERIC);
-			$values = array_values($values);
-			#RHecho($values);
 		}
 
+		#RHshow('Split Named', $named);
+		#RHshow('Split Values', $values);
 		return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, $named, $values);
 	}
 
@@ -670,7 +681,7 @@ class Riven
 	 *
 	 * @param string $input The HTML text of the table to convert.
 	 *
-	 * @return array A collection of TableCells that represents the table provided.
+	 * @return TableRow[] A collection of TableCells that represents the table provided.
 	 */
 	private static function buildMap(string $input): array
 	{
@@ -965,14 +976,14 @@ class Riven
 	 * @param PPFrame $frame The template frame in use.
 	 * @param string $templateName The name of the template.
 	 * @param int $nargs The number of arguments to divide everything up by.
-	 * @param array $values Unnamed values to be split up and included with the template.
 	 * @param array $named Named values that will be included in *every* template.
+	 * @param array $values Unnamed values to be split up and included with the template; 0-based.
 	 * @param bool $allowEmpty Whether the list of templates should include empty inputs.
 	 *
 	 * @return array A string[] containing the individual template calls that #splitargs splits into.
 	 *
 	 */
-	private static function getTemplates(PPFrame $frame, string $templateName, int $nargs, array $values, array $named, bool $allowEmpty): array
+	private static function getTemplates(PPFrame $frame, string $templateName, int $nargs, array $named, array $values, bool $allowEmpty): array
 	{
 		if (!$nargs) {
 			$nargs = count($values);
@@ -983,42 +994,41 @@ class Riven
 		}
 
 		$templates = [];
-		$namedParameters = '';
+		$templateBase = '{{' . $templateName;
 		foreach ($named as $name => $value) {
 			$value = $frame->expand($value);
-			$namedParameters .= "|$name=$value";
+			$templateBase .= "|$name=$value";
+		}
+
+		// Pre-dividing the template values allows handling missing values or values presented out of order (e.g., from
+		// override parameters) gracefully.
+		$rows = [];
+		foreach ($values as $key => $value) {
+			$rowNum = intdiv($key, $nargs);
+			$colNum = $key % $nargs;
+			$rows[$rowNum][$colNum + 1] = $value;
 		}
 
 		$templates = [];
-		for ($index = 0; $index < count($values); $index += $nargs) {
+		foreach ($rows as $row) {
 			$numberedParameters = '';
 			$blank = true;
-			for ($paramNum = 0; $paramNum < $nargs; $paramNum++) {
-				$value = $values[$index + $paramNum] ?? null;
-				if (!is_null($value)) {
-					if ($value instanceof PPNode) {
-						$value = trim($frame->expand($value, PPFrame::RECOVER_ORIG));
-					}
-
-					// Unlike normal templates, we strip off spacing even for numbered arguments, so groups can be
-					// formatted each on a new line.
-					$value = trim($value);
-					if (strlen($value)) {
-						$blank = false;
-					}
-
-					// We have to use numbered arguments to avoid the possibility that $value is (or even looks like)
-					// 'param=value'.
-					$displayNum = $paramNum + 1;
-					$numberedParameters .= "|$displayNum=$value";
+			foreach ($row as $paramNum => $value) {
+				// Unlike normal templates, we strip off spacing even for numbered arguments, so groups can be
+				// formatted each on a new line.
+				$value = trim($value);
+				if (strlen($value)) {
+					$blank = false;
 				}
+
+				// We have to use numbered arguments to avoid the possibility that $value is (or even looks like)
+				// 'param=value'.
+				$numberedParameters .= "|$paramNum=$value";
 			}
 
 			// show('Template: ', $template);
 			if ($allowEmpty || !$blank) {
-				$template = '{{' . $templateName . $numberedParameters . $namedParameters . '}}';
-				// show('Template: ', $template);
-				$templates[] = $template;
+				$templates[] = $templateBase . $numberedParameters . '}}';
 			}
 		}
 
@@ -1115,7 +1125,7 @@ class Riven
 			$output .= substr($input, $offset, $match[1] - $offset);
 			$offset = $match[1] + strlen($match[0]);
 			if ($match[0][1] == '/') {
-				$output = self::cleanRows($output, $protectRows, $cleanImages);
+				$output = self::cleanRows(self::buildMap($output), $protectRows, $cleanImages, (bool)$open);
 				// show("Clean Rows Out:\n", $output);
 				break;
 			} else {
@@ -1143,19 +1153,19 @@ class Riven
 	 * @param string $templateName The name of the template.
 	 * @param int $nargs The number of arguments to split parameters into.
 	 * @param array $named All named arguments not covered by $magicArgs. These will be passed to each template call.
-	 * @param array $values All numbered/anonymous arguments.
+	 * @param array $values All numbered/anonymous arguments; should be 0-based, not 1-based.
 	 *
 	 * @return mixed The text of all the function calls.
 	 *
 	 */
 	private static function splitArgsCommon(Parser $parser, PPFrame $frame, array $magicArgs, string $templateName, int $nargs, array $named, array $values): array
 	{
-		if ($nargs < 1 || empty($templateName)) {
+		if ($nargs < 1 || !$templateName || !count($values)) {
 			return [''];
 		}
 
 		$allowEmpty = $magicArgs[self::NA_ALLOWEMPTY] ?? false;
-		$templates = self::getTemplates($frame, $templateName, $nargs, $values, $named, $allowEmpty);
+		$templates = self::getTemplates($frame, $templateName, $nargs, $named, $values, $allowEmpty);
 		if (empty($templates)) {
 			return [''];
 		}
