@@ -970,8 +970,8 @@ class Riven
 	 * @param PPFrame $frame The template frame in use.
 	 * @param string $templateName The name of the template.
 	 * @param int $nargs The number of arguments to divide everything up by.
-	 * @param array $named Named values that will be included in *every* template.
-	 * @param array $values Unnamed values to be split up and included with the template; 0-based.
+	 * @param PPNode[] $named Named values that will be included in *every* template.
+	 * @param PPNode[] $values Unnamed values to be split up and included with the template; 0-based.
 	 * @param bool $allowEmpty Whether the list of templates should include empty inputs.
 	 *
 	 * @return array A string[] containing the individual template calls that #splitargs splits into.
@@ -1007,6 +1007,8 @@ class Riven
 		foreach ($rows as $row) {
 			$numberedParameters = '';
 			$blank = true;
+			/** @var int $paramNum */
+			/** @var PPNode $value */
 			foreach ($row as $paramNum => $value) {
 				// Unlike normal templates, we strip off spacing even for numbered arguments, so groups can be
 				// formatted each on a new line. The purpose of the double-expansion is to first check if the entire
