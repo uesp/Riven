@@ -251,7 +251,12 @@ class Riven
 				: $magicArgs[self::NA_DELIMITER] ?? ','
 		);
 
-		$values = explode($delimiter, trim($frame->expand($values[2] ?? '')));
+		$explode = explode($delimiter, trim($frame->expand($values[2] ?? '')), PPFrame::RECOVER_ORIG);
+		$values = [];
+		foreach ($explode as &$value) {
+			$values[] = $parser->preprocessToDom($value);
+		}
+
 		#RHshow('Explode Named', $named);
 		#RHshow('Explode Values', $values);
 		return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, $named, $values);
@@ -595,32 +600,16 @@ class Riven
 		} else {
 			#RHecho('Split Frame');
 			$values = [];
-			if (class_exists('MetaTemplate_body')) {
-				// MetaTemplate v1 doesn't guarantee that DOM and cached values will be the same, so we have to use the
-				// cached values, but this creates problems with embedded tables and other special formatting, so we
-				// don't use it generally.
-				foreach ($frame->getNumberedArguments() as $key => $value) {
-					$values[$key - 1] = $value;
-				}
+			// For MetaTemplate 2, DOM and cache should match, so we take DOM values and parse them, leaving
+			// templates as text so that {{!}} and other such things work as expected.
+			foreach ($frame->numberedArgs as $key => $value) {
+				$values[$key - 1] = $value;
+			}
 
-				foreach ($frame->getNamedArguments() as $key => $value) {
-					$intKey = (int)$key;
-					if ($intKey > 0 && !isset($values[$intKey])) {
-						$values[$intKey - 1] = $value; // -1 because values is 0-based
-					}
-				}
-			} else {
-				// For MetaTemplate 2, DOM and cache should match, so we take DOM values and parse them, leaving
-				// templates as text so that {{!}} and other such things work as expected.
-				foreach ($frame->numberedArgs as $key => $value) {
-					$values[$key - 1] = $frame->expand($value, PPFrame::NO_TEMPLATES);
-				}
-
-				foreach ($frame->namedArgs as $key => $value) {
-					$intKey = (int)$key;
-					if ($intKey > 0 && !isset($values[$intKey])) {
-						$values[$intKey - 1] = $frame->expand($value, PPFrame::NO_TEMPLATES); // -1 because values is 0-based
-					}
+			foreach ($frame->namedArgs as $key => $value) {
+				$intKey = (int)$key;
+				if ($intKey > 0 && !isset($values[$intKey])) {
+					$values[$intKey - 1] = $value; // -1 because values is 0-based
 				}
 			}
 		}
@@ -1020,10 +1009,16 @@ class Riven
 			$blank = true;
 			foreach ($row as $paramNum => $value) {
 				// Unlike normal templates, we strip off spacing even for numbered arguments, so groups can be
-				// formatted each on a new line.
-				$value = trim($value);
-				if (strlen($value)) {
+				// formatted each on a new line. The purpose of the double-expansion is to first check if the entire
+				// value evaluates to nothing. This allows template lookalikes like {{#if}} to take effect normally. If
+				// it's non-blank, then we re-expand, but retaining templates so that things like {{!}} get processed
+				// as expected.
+				$checkValue = trim($frame->expand($value));
+				if (strlen($checkValue)) {
 					$blank = false;
+					$value = trim($frame->expand($value, PPFrame::NO_TEMPLATES));
+				} else {
+					$value = '';
 				}
 
 				// We have to use numbered arguments to avoid the possibility that $value is (or even looks like)
@@ -1158,7 +1153,7 @@ class Riven
 	 * @param string $templateName The name of the template.
 	 * @param int $nargs The number of arguments to split parameters into.
 	 * @param array $named All named arguments not covered by $magicArgs. These will be passed to each template call.
-	 * @param array $values All numbered/anonymous arguments; should be 0-based, not 1-based.
+	 * @param PPNode[] $values All numbered/anonymous arguments; should be 0-based, not 1-based.
 	 *
 	 * @return mixed The text of all the function calls.
 	 *
