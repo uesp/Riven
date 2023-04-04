@@ -251,11 +251,7 @@ class Riven
 				: $magicArgs[self::NA_DELIMITER] ?? ','
 		);
 
-		$explode = explode($delimiter, trim($frame->expand($values[2] ?? '')), PPFrame::RECOVER_ORIG);
-		$values = [];
-		foreach ($explode as &$value) {
-			$values[] = $parser->preprocessToDom($value);
-		}
+		$values = explode($delimiter, trim($frame->expand($values[2] ?? '')), PPFrame::NO_TEMPLATES);
 
 		#RHshow('Explode Named', $named);
 		#RHshow('Explode Values', $values);
@@ -589,33 +585,40 @@ class Riven
 			// Explode
 			#RHecho('Split Explode');
 			$delimiter = $magicArgs[self::NA_DELIMITER] ?? ',';
-			$values = explode($delimiter, $magicArgs[self::NA_EXPLODE]);
+			$orig = trim($frame->expand($magicArgs[self::NA_EXPLODE], PPFrame::RECOVER_ORIG));
+			$values = explode($delimiter, $orig);
 		} elseif (count($values) > 2) {
 			#RHecho('Split Args');
 			$slicedValues = array_slice($values, 2);
 			$values = [];
 			foreach ($slicedValues as $value) {
-				$values[] = trim($frame->expand($value));
+				$values[] = trim($frame->expand($value, PPFrame::NO_TEMPLATES));
 			}
 		} else {
 			#RHecho('Split Frame');
 			$values = [];
-			// For MetaTemplate 2, DOM and cache should match, so we take DOM values and parse them, leaving
-			// templates as text so that {{!}} and other such things work as expected.
+			// {{!}} now being a magic word broke MetaTemplate 1's handling of them, so for MetaTemplate 2, we reparse
+			// the DOM values, leaving templates as text so that {{!}} and other such things work as expected. This
+			// might break {{PAGENAMEx}}, though. If so, that seems like a corner case that probably can be written off
+			// in the description as "don't do that".
+			$flags = is_null($frame->parent)
+				? PPFrame::NO_TEMPLATES | PPFrame::NO_ARGS
+				: PPFrame::NO_TEMPLATES;
+			$parent = $frame->parent ?? $frame;
 			foreach ($frame->numberedArgs as $key => $value) {
-				$values[$key - 1] = $value;
+				$values[$key - 1] = $parent->expand($value, $flags);
 			}
 
 			foreach ($frame->namedArgs as $key => $value) {
 				$intKey = (int)$key;
 				if ($intKey > 0 && !isset($values[$intKey])) {
-					$values[$intKey - 1] = $value; // -1 because values is 0-based
+					$values[$intKey - 1] = $parent->expand($value, $flags); // -1 because values is 0-based
 				}
 			}
 		}
 
-		#RHshow('Split Named', $named);
-		#RHshow('Split Values', $values);
+		RHshow('Split Named', $named);
+		RHshow('Split Values', $values);
 		return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, $named, $values);
 	}
 
@@ -750,11 +753,9 @@ class Riven
 					// Remove <img> tags
 					$content = preg_replace('#<img[^>]+?/>#', '', $content, -1, $count);
 					$initialCount = $count;
-					if ($count > 0) {
-						while ($count > 0) {
-							// Removes any content-free open/close tags that used to surround the removed image.
-							$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $count);
-						}
+					while ($count > 0) {
+						// Removes any content-free open/close tags that used to surround the removed image.
+						$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $count);
 					}
 
 					$content = trim($content);
@@ -998,6 +999,7 @@ class Riven
 		// override parameters) gracefully.
 		$rows = [];
 		foreach ($values as $key => $value) {
+			// $value = $parser->preprocessToDom($value);
 			$rowNum = intdiv($key, $nargs);
 			$colNum = $key % $nargs;
 			$rows[$rowNum][$colNum + 1] = $value;
@@ -1015,10 +1017,10 @@ class Riven
 				// value evaluates to nothing. This allows template lookalikes like {{#if}} to take effect normally. If
 				// it's non-blank, then we re-expand, but retaining templates so that things like {{!}} get processed
 				// as expected.
-				$checkValue = trim($frame->expand($value));
+				$dom = $frame->parser->preprocessToDom($value);
+				$checkValue = trim($frame->expand($dom));
 				if (strlen($checkValue)) {
 					$blank = false;
-					$value = trim($frame->expand($value, PPFrame::NO_TEMPLATES));
 				} else {
 					$value = '';
 				}
