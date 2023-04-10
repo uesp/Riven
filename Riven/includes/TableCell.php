@@ -1,23 +1,43 @@
 <?php
 class TableCell
 {
-	private $attribs;
-	private $colspan;
-	private $content;
-	private $isHeader;
-	/**
-	 * $parent
-	 *
-	 * @var self
-	 */
-	private $parent;
-	private $rowspan;
-	private $rowspanModified;
-
+	#region Static Fields
+	/** @var string $colSpanRegex Regex to find a colspan. */
 	private static $colSpanRegex = '#\bcolspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
+
+	/** @var string $rowSpanRegex Regex to find a rowspan. */
 	private static $rowSpanRegex = '#\browspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
+	#endregion
 
+	#region Fields
+	private $attribs;
+	private $rowspanModified;
+	#endregion
 
+	#region Public Properties
+	/** @var int $colspan Reflection of the colspan attribute */
+	public $colspan;
+
+	/** @var string $content Content between <tr> or <th> tags. */
+	public $content;
+
+	/** @var bool $isHeader Is this a <th>? */
+	public $isHeader;
+
+	/** @var bool $isImage Does the content reduce to being just an image (optionally with surrounding tag pairs)? */
+	public $isImage;
+
+	/** @var ?self $parent Is this is a span element, the parent cell; otherwise, null. */
+	public $parent;
+
+	/** @var int $colspan Reflection of the rowspan attribute */
+	public $rowspan;
+
+	/** @var ?string $trimmedContent The content after trimming out cruft. */
+	public $trimmedContent;
+	#endregion
+
+	#region Constructor
 	/**
 	 * Creates a new instance of a TableCell.
 	 *
@@ -26,17 +46,63 @@ class TableCell
 	 * @param ?TableCell $parent The parent cell for cells that span multiple rows or columns.
 	 * @param int $colspan How many columns the cell spans.
 	 * @param int $rowspan How many rows the cell spans.
-	 *
 	 */
-	private function __construct(?string $content, string $attribs, bool $isHeader, ?TableCell $parent, int $colspan, int $rowspan)
+	private function __construct(?string $content, string $attribs, bool $isHeader, ?TableCell $parent, int $colspan, int $rowspan, bool $cleanImages)
 	{
-		$this->attribs = $attribs;
 		$this->content = $content;
+		$this->attribs = $attribs;
 		$this->isHeader = $isHeader;
 		$this->parent = $parent;
 		$this->colspan = $colspan;
 		$this->rowspan = $rowspan;
+
+		$content = trim(html_entity_decode($this->content));
+		if ($cleanImages && !$this->isHeader) {
+			// Remove <img> tags
+			$content = preg_replace('#<img[^>]+?/>#', '', $content, -1, $imgCount);
+			$initialCount = $imgCount;
+			while ($imgCount > 0) {
+				// Removes any content-free open/close tags that used to surround the removed image.
+				$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $imgCount);
+			}
+
+			$content = trim($content);
+			$this->isImage = $initialCount && !strlen($content) && !$this->isHeader;
+		} else {
+			$this->isImage = false; // This may actually be true, but we don't care.
+		}
+
+		// Remove unassigned {{{parameter values}}}
+		$content = preg_replace('#\{{3}[^\}]+\}{3}#', '', $content, -1, $count);
+		while ($count > 0) {
+			// Removes any content-free open/close tags that used to surround the removed value.
+			$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $count);
+		}
+
+		$this->trimmedContent = trim($content);
 	}
+	#endregion
+
+	#region Magic Methods
+	public function __debugInfo()
+	{
+		$parent = $this->parent;
+		if (is_null($parent)) {
+			return [
+				'attribs:TableCell:private' => $this->attribs,
+				'rowspanModified:TableCell:private' => $this->rowspanModified,
+				'isHeader' => $this->isHeader,
+				'colspan' => $this->colspan,
+				'rowspan' => $this->rowspan,
+				'content' => $this->content,
+				'trimmedContent' => $this->trimmedContent,
+				'isImage' => $this->isImage
+			];
+		}
+
+		return ['<span child>' => ''];
+	}
+	#endregion
 
 	/**
 	 * Creates a new instance of a TableCell from a Regex match with named groups.
@@ -46,7 +112,7 @@ class TableCell
 	 * @return ?TableCell
 	 *
 	 */
-	public static function FromMatch(array $match): ?TableCell
+	public static function FromMatch(array $match, bool $cleanImages): ?TableCell
 	{
 		if (!isset($match)) {
 			return null;
@@ -58,7 +124,7 @@ class TableCell
 		preg_match(self::$rowSpanRegex, $attribs, $rowspan);
 		$rowspan = $rowspan ? intval($rowspan['span']) : 1;
 
-		return new TableCell($match['content'], $attribs, $match['name'] === 'th', null, $colspan, $rowspan);
+		return new TableCell($match['content'], $attribs, $match['name'] === 'th', null, $colspan, $rowspan, $cleanImages);
 	}
 
 	/**
@@ -72,7 +138,7 @@ class TableCell
 	public static function SpanChild(TableCell $parent): ?TableCell
 	{
 		return isset($parent)
-			? new TableCell('', $parent->attribs, $parent->isHeader, $parent, 0, 0)
+			? new TableCell('', '', $parent->isHeader, $parent, 0, 0, false)
 			: null;
 	}
 
@@ -84,77 +150,14 @@ class TableCell
 	 */
 	public function decrementRowspan(): void
 	{
-		// Because of the possibility of repeated updates, the rowspan value is altered on its own and the attributes
-		// updated only when actually called for.
-		if ($this->parent) {
-			$this->parent->decrementRowspan();
-		} else {
-			$this->rowspan--;
-			$this->rowspanModified = true;
-		}
-	}
-
-	/**
-	 * Gets the colspan property (<td colspan=#>)
-	 *
-	 * @return int
-	 *
-	 */
-	public function getColspan(): int
-	{
-		return $this->colspan;
-	}
-
-	/**
-	 * Gets the content property (<td>content</td>).
-	 *
-	 * @return string
-	 *
-	 */
-	public function getContent(): string
-	{
-		return $this->content;
-	}
-
-	/**
-	 * Gets whether the cell is a header (<th>) or a regular cell (<td>).
-	 *
-	 * @return bool
-	 *
-	 */
-	public function getIsHeader(): bool
-	{
-		return $this->isHeader;
-	}
-
-	/**
-	 * Gets the parent TableCell for a colspan or rowspan.
-	 *
-	 * @return ?TableCell
-	 *
-	 */
-	public function getParent(): ?TableCell
-	{
-		return $this->parent;
-	}
-
-	/**
-	 * Gets the rowspan property (<td rowspan=#>).
-	 *
-	 * @return int
-	 *
-	 */
-	public function getRowspan(): int
-	{
-		$obj = $this->parent ? $this->parent : $this;
-		return $obj->rowspan;
+		$this->rowspan--;
+		$this->rowspanModified = true;
 	}
 
 	/**
 	 * Serializes the TableCell to HTML.
 	 *
 	 * @return string
-	 *
 	 */
 	public function toHtml(): string
 	{
@@ -172,7 +175,6 @@ class TableCell
 	 * Updates the rowspan portion of the attribs based on the current rowspan property.
 	 *
 	 * @return void
-	 *
 	 */
 	private function updateRowSpan(): void
 	{

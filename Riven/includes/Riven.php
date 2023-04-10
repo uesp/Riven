@@ -617,8 +617,8 @@ class Riven
 			}
 		}
 
-		RHshow('Split Named', $named);
-		RHshow('Split Values', $values);
+		#RHshow('Split Named', $named);
+		#RHshow('Split Values', $values);
 		return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, $named, $values);
 	}
 
@@ -675,7 +675,7 @@ class Riven
 	 *
 	 * @return TableRow[] A collection of TableCells that represents the table provided.
 	 */
-	private static function buildMap(string $input): array
+	private static function buildMap(string $input, bool $cleanImages): array
 	{
 		/** @var TableRow[] map */
 		$map = [];
@@ -685,38 +685,12 @@ class Riven
 			$map[] =  new TableRow($rawRow[1]);
 		}
 
-		$rowNum = 0;
-		$rowCount = count($map);
-		foreach ($rawRows as $rawRow) {
-			$row = $map[$rowNum];
-			$cellNum = 0;
+		foreach ($rawRows as $rowNum => $rawRow) {
 			preg_match_all('#<(?<name>t[dh])\s*(?<attribs>[^>]*)>(?<content>.*?)</\1\s*>#s', $rawRow[0], $rawCells, PREG_SET_ORDER);
-			foreach ($rawCells as $rawCell) {
-				while (isset($row->cells[$cellNum])) {
-					$cellNum++;
-				}
-
-				$cell = TableCell::FromMatch($rawCell);
-				$row->cells[$cellNum] = $cell;
-				$rowspan = $cell->getRowspan();
-				$colspan = $cell->getColspan();
-				if ($rowspan > 1 || $colspan > 1) {
-					$spanCell = TableCell::SpanChild($cell);
-					for ($r = 0; $r < $rowspan; $r++) {
-						for ($c = 0; $c < $colspan; $c++) {
-							if ($r != 0 || $c != 0) {
-								if (($rowNum + $r) < $rowCount) {
-									$map[$rowNum + $r]->cells[$cellNum + $c] = $spanCell;
-								}
-							}
-						}
-					}
-				}
-			}
-
-			$rowNum++;
+			$map[$rowNum]->addRawCells($map, $rowNum, $rawCells, $cleanImages);
 		}
 
+		#RHshow('Map', $map);
 		return $map;
 	}
 
@@ -731,97 +705,51 @@ class Riven
 	 * back to the home cell.
 	 *
 	 */
-	private static function cleanRows(array $map, int $protectRows, bool $cleanImages): string
+	private static function cleanRows(array $map, int $protectRows): string
 	{
-		#RHshow('Clean Rows In', $input);
+		#RHshow('Map', $map);
+		$rowNum = count($map) - 1;
 		$sectionHasContent = false;
-		$contentRows = false;
-		// Do not clean single-row subtables which are almost certainly used for formatting.
-		$prefixLen = strlen(Parser::MARKER_PREFIX);
-		for ($rowNum = count($map) - 1; $rowNum >= $protectRows; $rowNum--) {
+		$sectionHasRows = false;
+		$prevWidth = 100000;
+		while ($rowNum >= $protectRows) {
 			$row = $map[$rowNum];
-			$rowHasContent = false;
-			$rowHasImageOnlyCells = false;
-			$rowHasNonImageCells = false;
-			$allHeaders = true;
-			/** @var TableCell[] $spans */
-			$spans = [];
-			foreach ($row->cells as $cell) {
-				#RHecho($cell);
-				$content = trim(html_entity_decode($cell->getContent()));
-				if ($cleanImages && !$cell->getIsHeader()) {
-					// Remove <img> tags
-					$content = preg_replace('#<img[^>]+?/>#', '', $content, -1, $count);
-					$initialCount = $count;
-					while ($count > 0) {
-						// Removes any content-free open/close tags that used to surround the removed image.
-						$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $count);
-					}
-
-					$content = trim($content);
-					$rowHasImageOnlyCells |= $initialCount && !strlen($content);
-				} else {
-					$count = 0;
-				}
-
-				if (strlen($content)) {
-					#RHecho('\'', $content, '\'');
-					$rowHasNonImageCells |= !$cell->getIsHeader();
-				}
-
-				// Remove unassigned {{{parameter values}}}
-				$content = preg_replace('#\{{3}[^\}]+\}{3}#', '', $content, -1, $count);
-				while ($count > 0) {
-					// Removes any content-free open/close tags that used to surround the removed value.
-					$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $count);
-				}
-
-				$content = trim($content);
-
-				// If the cell has content and either it's a non-header cell OR it has a strip-item (which must be an embedded table at this point), then it shouldn't be stripped.
-				$rowHasContent |= strlen($content) && !$cell->getIsHeader();
-				if (!$rowHasContent) {
-					$startPos = strpos($content, Parser::MARKER_PREFIX);
-					if ($startPos !== false) {
-						$rowHasContent = ($startPos >= 0) && strpos($content, Parser::MARKER_SUFFIX, $startPos + $prefixLen) >= 0;
-					}
-				}
-
-				$allHeaders &= $cell->getIsHeader();
-				if ($cell->getParent()) {
-					$spans[] = $cell->getParent();
-				}
-			}
-
-			$rowHasContent |= ($rowHasImageOnlyCells && !$rowHasNonImageCells);
-			$sectionHasContent |= $rowHasContent;
-			if ($allHeaders) {
-				// Rownum/protectrow check is a apecial allowance for the top-most header being the only row left in the
-				// table. If so, and if full table deletion is allowed, then delete the "section" even if section has
-				// no content. This can happen if the table starts with a main header followed immediately by a
-				// sub-header.
-				if ($contentRows || ($rowNum === 0 && $protectRows === 0)) {
-					#RHecho($contentRows);
-					if ($sectionHasContent) {
-						$sectionHasContent = false;
-					} else {
-						// show('Removed Row: ', $rowNum, "\n", $rowHasContent, "\n", $row);
+			if ($row->isHeader) {
+				#RHshow('Width', $row->width, '/', $prevWidth, ' ', $row->toHtml());
+				if ($row->width < $prevWidth) {
+					$prevWidth = $row->width;
+					#RHshow('Section has rows', $sectionHasRows, "\nSection has content: ", $sectionHasContent);
+					if ($sectionHasRows && !$sectionHasContent) {
+						$row->decrementRowspan();
 						unset($map[$rowNum]);
+						#RHshow('Removed Row', $rowNum, ' ($rowHasContent: ', $rowHasContent, ', $tableHasContent: ', $tableHasContent, ')');
 					}
+				} else {
+					// Reparse the same row without advancing.
+					#RHecho('Reparse');
+					$sectionHasRows = false;
+					$sectionHasContent = false; // Treats null sections as having rows.
+					$prevWidth = 100000;
+					continue;
+				}
+			} else {
+				if ($prevWidth < 100000) {
+					// We've just transitioned off of a header row, so reset as needed.
+					$sectionHasContent = false;
+					$prevWidth = 100000;
 				}
 
-				$contentRows = false;
-			} else {
-				$contentRows =  true;
-				if (!$rowHasContent) {
-					foreach ($spans as $cell) {
-						$cell->decrementRowspan();
-						#RHshow('RowCount', $cell->getRowspan());
-					}
-
+				$sectionHasRows = true;
+				if ($row->hasContent) {
+					$sectionHasContent = true;
+				} else {
+					$row->decrementRowspan();
 					unset($map[$rowNum]);
+					#RHecho('Removed row '. $rowNum);
 				}
 			}
+
+			$rowNum--;
 		}
 
 		#RHecho($map);
@@ -1091,18 +1019,7 @@ class Riven
 		$output = '';
 		/** @var TableRow $row */
 		foreach ($map as $row) {
-			$output .= $row->getOpenTag() . "\n";
-			/** @var TableCell $cell */
-			foreach ($row->cells as $cell) {
-				#RHecho($cell);
-				// Conditional is to avoid unwanted blank lines in output.
-				$html = $cell->toHtml();
-				if ($html) {
-					$output .= $html . "\n";
-				}
-			}
-
-			$output .= "</tr>\n";
+			$output .= $row->toHtml();
 		}
 
 		return $output;
@@ -1129,8 +1046,8 @@ class Riven
 			$output .= substr($input, $offset, $match[1] - $offset);
 			$offset = $match[1] + strlen($match[0]);
 			if ($match[0][1] == '/') {
-				$output = self::cleanRows(self::buildMap($output), $protectRows, $cleanImages, (bool)$open);
-				// show("Clean Rows Out:\n", $output);
+				$output = self::cleanRows(self::buildMap($output, $cleanImages), $protectRows);
+				#RHshow('Clean Rows', $output);
 				break;
 			} else {
 				$output .= self::parseTable($parser, $input, $offset, $protectRows, $cleanImages, $match[0]);
