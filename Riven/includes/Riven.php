@@ -120,16 +120,16 @@ class Riven
 		// Categories and trails are stripped on ''any'' template page, not just when directly calling the template
 		// (but not in preview mode).
 		if ($parser->getTitle()->getNamespace() === NS_TEMPLATE) {
-			// save categories before processing
+			// Save categories before processing.
 			$precats = $parser->getOutput()->getCategories();
 			$retval = $parser->recursiveTagParse($retval, $frame);
-			// reset categories to the pre-processing list to remove any new categories
+			// Reset categories to the pre-processing list to remove any new categories.
 			$parser->getOutput()->setCategoryLinks($precats);
-			return $retval;
+		} else {
+			$retval = $parser->recursiveTagParse($retval, $frame);
 		}
 
-		$retval = $parser->recursiveTagParse($retval, $frame);
-		return $retval;
+		return [$retval, 'markerType' => 'none'];
 	}
 
 	/**
