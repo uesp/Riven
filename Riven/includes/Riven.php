@@ -24,7 +24,6 @@ class Riven
 	public const NA_DELIMITER  = 'riven-delimiter';
 	public const NA_EXPLODE    = 'riven-explode';
 	public const NA_MODE       = 'riven-mode';
-	public const NA_PROTROWS   = 'riven-protectrows';
 	public const NA_SEED       = 'riven-seed';
 
 	private const TRACKING_ARG      = 'riven-tracking-arg';
@@ -141,7 +140,6 @@ class Riven
 	 *     cleanimages: Whether to remove image-only cells or count them as content.
 	 *           debug: Set to PHP true to show the cleaned table code on-screen during Show Preview. Set to 'always'
 	 *                  to show even when saved.
-	 *     protectrows: The number of rows at the top of the table that will not be removed no matter what.
 	 * @param Parser $parser The parser in use.
 	 * @param PPFrame $frame The templare frame in use.
 	 *
@@ -165,8 +163,7 @@ class Riven
 		static $magicWords;
 		$magicWords = $magicWords ?? new MagicWordArray([
 			ParserHelper::NA_DEBUG,
-			self::NA_CLEANIMG,
-			self::NA_PROTROWS
+			self::NA_CLEANIMG
 		]);
 
 		#RHshow('Pre-transform', $attributes);
@@ -179,10 +176,9 @@ class Riven
 		$offset = 0;
 		$output = '';
 		$lastVal = null;
-		$protectRows = intval($attributes[self::NA_PROTROWS] ?? 0);
 		$cleanImages = intval($attributes[self::NA_CLEANIMG] ?? 1);
 		do {
-			$lastVal = self::parseTable($parser, $text, $offset, $protectRows, $cleanImages);
+			$lastVal = self::parseTable($parser, $text, $offset, $cleanImages);
 			$output .= $lastVal;
 		} while ($lastVal);
 
@@ -310,7 +306,7 @@ class Riven
 
 		foreach ($uniqueTitles as $title) {
 			if (self::existsCommon($parser, $title)) {
-				return $title->getFullText();
+				return $title->getPrefixedText();
 			}
 		}
 
@@ -698,58 +694,87 @@ class Riven
 	 * Removes emptry rows from the output.
 	 *
 	 * @param TableRow[] $map The table map to work on.
-	 * @param int $protectRows The number of rows to protect at the top of the table.
 	 * @param bool $cleanImages Whether to clean images in cells that aren't headers.
 	 *
 	 * @return TableCell[] A map of every cell in the table. Those with spans will appear as individual cells with a link
 	 * back to the home cell.
 	 *
 	 */
-	private static function cleanRows(array $map, int $protectRows): string
+	private static function cleanRows(array $map): string
 	{
 		#RHshow('Map', $map);
 		$rowNum = count($map) - 1;
-		$sectionHasContent = false;
-		$sectionHasRows = false;
-		$prevWidth = 100000;
-		while ($rowNum >= $protectRows) {
+		$sectionHasContent = false; // Does the section have uncleaned rows?
+		$sectionHasRows = false; // Does the section have *any* normal rows, whether or not we clean them?
+		$prevWidth = PHP_INT_MAX;
+		while ($rowNum >= 0) {
 			$row = $map[$rowNum];
-			if ($row->isHeader) {
-				#RHshow('Width', $row->width, '/', $prevWidth, ' ', $row->toHtml());
-				if ($row->width < $prevWidth) {
-					$prevWidth = $row->width;
-					#RHshow('Section has rows', $sectionHasRows, "\nSection has content: ", $sectionHasContent);
-					if ($sectionHasRows && !$sectionHasContent) {
-						$row->decrementRowspan();
-						unset($map[$rowNum]);
-						#RHshow('Removed Row', $rowNum, ' ($rowHasContent: ', $rowHasContent, ', $tableHasContent: ', $tableHasContent, ')');
-					}
+			$cleanType = $row->cleanType;
+			if ($cleanType === 'auto') {
+				if ($row->isHeader) {
+					$cleanType = ($rowNum === 0 && $row->width === 1 && $row->getColumnCount() > 1)
+						? 'tableheader'
+						: 'header';
 				} else {
-					// Reparse the same row without advancing.
-					#RHecho('Reparse');
-					$sectionHasRows = false;
-					$sectionHasContent = false; // Treats null sections as having rows.
-					$prevWidth = 100000;
-					continue;
-				}
-			} else {
-				if ($prevWidth < 100000) {
-					// We've just transitioned off of a header row, so reset as needed.
-					$sectionHasContent = false;
-					$prevWidth = 100000;
-				}
-
-				$sectionHasRows = true;
-				if ($row->hasContent) {
-					$sectionHasContent = true;
-				} else {
-					$row->decrementRowspan();
-					unset($map[$rowNum]);
-					#RHecho('Removed row '. $rowNum);
+					$cleanType = 'normal';
 				}
 			}
 
+			switch ($cleanType) {
+				case 'clean':
+					$cleanRow = true;
+					break;
+				case 'header':
+					#RHshow('Width', $row->width, '/', $prevWidth, ' ', $row->toHtml());
+					if ($row->width < $prevWidth) {
+						$prevWidth = $row->width;
+						#RHshow('Section has rows', $sectionHasRows, "\nSection has content: ", $sectionHasContent);
+						$cleanRow = $sectionHasRows && !$sectionHasContent;
+					} else {
+						// This header looks like it's not part of the same group, presumably some kind of fixed
+						// header, so reset variables to starting values and reparse the same row without advancing.
+						#RHecho('Reparse');
+						$sectionHasContent = false;
+						$sectionHasRows = false;
+						$prevWidth = PHP_INT_MAX;
+						continue 2;
+					}
+
+					break;
+				case 'normal':
+					if ($prevWidth < PHP_INT_MAX) {
+						// We've just transitioned off of a header row, so reset as needed.
+						$sectionHasContent = false;
+						$prevWidth = PHP_INT_MAX;
+					}
+
+					$cleanRow = !$row->hasContent;
+					$sectionHasContent |= $row->hasContent;
+					$sectionHasRows = true;
+					break;
+				default:
+					$cleanRow = false;
+					break;
+			}
+
+			if ($cleanRow) {
+				$row->decrementRowspan();
+				unset($map[$rowNum]);
+			}
+
 			$rowNum--;
+		}
+
+		$onlyHeaderRows = true;
+		foreach ($map as $rowNum => $row) {
+			if ($row->cleanType !== 'tableheader') {
+				$onlyHeaderRows = false;
+				break;
+			}
+		}
+
+		if ($onlyHeaderRows) {
+			$map = [];
 		}
 
 		#RHecho($map);
@@ -1031,13 +1056,12 @@ class Riven
 	 * @param Parser $parser The parser in use.
 	 * @param mixed $input The table to work on.
 	 * @param mixed $offset Where in the table we're looking at. This is used in cleaning nested tables.
-	 * @param mixed $protectRows The number of rows at the top of the table that should not be removed, no matter what.
 	 * @param ?string $open The table tag that was found during recursion. This can be null for the outermost table.
 	 *
 	 * @return string The cleaned results.
 	 *
 	 */
-	private static function parseTable(Parser $parser, $input, int &$offset, int $protectRows, bool $cleanImages, ?string $open = null)
+	private static function parseTable(Parser $parser, $input, int &$offset, bool $cleanImages, ?string $open = null)
 	{
 		#RHshow('Parse Table In', substr($input, $offset));
 		$output = '';
@@ -1046,11 +1070,11 @@ class Riven
 			$output .= substr($input, $offset, $match[1] - $offset);
 			$offset = $match[1] + strlen($match[0]);
 			if ($match[0][1] == '/') {
-				$output = self::cleanRows(self::buildMap($output, $cleanImages), $protectRows);
+				$output = self::cleanRows(self::buildMap($output, $cleanImages));
 				#RHshow('Clean Rows', $output);
 				break;
 			} else {
-				$output .= self::parseTable($parser, $input, $offset, $protectRows, $cleanImages, $match[0]);
+				$output .= self::parseTable($parser, $input, $offset, $cleanImages, $match[0]);
 				// show("Parse Table Out:\n", $output);
 			}
 		}

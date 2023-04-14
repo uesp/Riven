@@ -2,29 +2,34 @@
 
 class TableRow
 {
+	#region Private Constants
+	private const PREFIX_LEN = 9; // strlen(Parser::MARKER_SUFFIX) = 6 for MW < 1.27;
+	#endregion
+
 	#region Private Static Fields
-	const PREFIX_LEN = 9; // strlen(Parser::MARKER_SUFFIX) = 6 for MW < 1.27;
+	private static $cleanTypeRegex = '#\bdata-cleantype\s*=\s*([\'"]?)(?<cleantype>\w+)\1#';
 	#endregion
 
 	#region Fields
-	/**
-	 * The cells in the row.
-	 *
-	 * @var TableCell[] $cells
-	 */
+	/** @var TableCell[] $cells The cells in the row. */
 	private $cells = [];
+
+	/** @var string $openTag The full <tr> tag that started this row. */
+	private $openTag;
 	#endregion
 
 	#region Public Properties
+	/** @var string $cleanType The cleaning strategy to use for this row:
+	 *     auto  : Use the automatic settings. Only useful to override a previous value.
+	 *     clean : Always clean this row; mostly useful for debugging and format testing.
+	 *     header: Treat this row like a header and show or hide it accordingly.
+	 *     keep  : Always keep this row.
+	 *     normal: Treat this row like a normal row and show or hide it accordingly.
+	 *     tableheader: Remove this row if the entire table is being removed; otherwise always keep it.
+	 */
+	public $cleanType;
 	public $hasContent = false;
 	public $isHeader = true;
-
-	/**
-	 * The full <tr> tag that started this row.
-	 *
-	 * @var string
-	 */
-	public $openTag;
 	public $width = 0;
 	#endregion
 
@@ -38,6 +43,8 @@ class TableRow
 	public function __construct(string $openTag)
 	{
 		$this->openTag = $openTag;
+		preg_match(self::$cleanTypeRegex, $openTag, $matches);
+		$this->cleanType = empty($matches) ? 'auto' : $matches['cleantype'];
 	}
 	#endregion
 
@@ -76,11 +83,6 @@ class TableRow
 		}
 	}
 
-	public function getColumnCount()
-	{
-		return count($this->cells);
-	}
-
 	public function decrementRowspan()
 	{
 		$parents = [];
@@ -93,14 +95,9 @@ class TableRow
 		}
 	}
 
-	public function hasContent()
+	public function getColumnCount()
 	{
-		return $this->hasContent;
-	}
-
-	public function isHeader()
-	{
-		return $this->isHeader;
+		return count($this->cells);
 	}
 
 	public function setCell(int $col, TableCell $cell)
