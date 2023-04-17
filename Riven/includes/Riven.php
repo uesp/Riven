@@ -129,7 +129,7 @@ class Riven
 			$retval = $parser->recursiveTagParse($retval, $frame);
 		}
 
-		return [$retval, 'markerType' => 'none'];
+		return [$retval, 'markerType' => 'general'];
 	}
 
 	/**
@@ -233,6 +233,8 @@ class Riven
 			return '';
 		}
 
+		#RHshow('Magic Args', $magicArgs);
+
 		// show("Passed if check:\n", $values, "\nDupes:\n", $dupes);
 		/**
 		 * @var array $named
@@ -247,8 +249,12 @@ class Riven
 				: $magicArgs[self::NA_DELIMITER] ?? ','
 		);
 
-		$values = explode($delimiter, trim($frame->expand($values[2] ?? '')), PPFrame::NO_TEMPLATES);
+		$values = $frame->expand($values[2] ?? '');
+		$values = explode($delimiter, $values);
 
+		#RHshow('Template Name', $templateName);
+		#RHshow('Num Args', $nargs);
+		#RHshow('Delimiter', $delimiter);
 		#RHshow('Explode Named', $named);
 		#RHshow('Explode Values', $values);
 		return self::splitArgsCommon($parser, $frame, $magicArgs, $templateName, $nargs, $named, $values);
