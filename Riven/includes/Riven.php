@@ -77,6 +77,7 @@ class Riven
 	public static function doCleanSpace(string $content, array $attributes, Parser $parser, PPFrame $frame)
 	{
 		static $magicWords;
+		static $modeWords;
 		$magicWords = $magicWords ?? new MagicWordArray([
 			ParserHelper::NA_DEBUG,
 			self::NA_MODE
@@ -84,15 +85,18 @@ class Riven
 
 		$args = ParserHelper::transformAttributes($attributes, $magicWords);
 
-		static $modeWords;
-		$modeWords = $modeWords ?? new MagicWordArray([
-			self::AV_RECURSIVE,
-			self::AV_TOP,
-			self::AV_ORIGINAL
-		]);
+		if ($frame instanceof PPTemplateFrame_Hash) {
+			$modeWords = $modeWords ?? new MagicWordArray([
+				self::AV_RECURSIVE,
+				self::AV_TOP,
+				self::AV_ORIGINAL
+			]);
 
-		$match = $modeWords->matchStartToEnd($args[self::NA_MODE] ?? self::AV_ORIGINAL);
-		$modeWord = $match === false ? self::AV_ORIGINAL : $match;
+			$match = $modeWords->matchStartToEnd($args[self::NA_MODE] ?? self::AV_ORIGINAL);
+			$modeWord = $match === false ? self::AV_ORIGINAL : $match;
+		} else {
+			$modeWord = self::AV_ORIGINAL;
+		}
 
 		$retval = $content;
 		if ($modeWord !== self::AV_ORIGINAL) {
@@ -196,7 +200,7 @@ class Riven
 	 * A variant of #splitargs. See that function for details.
 	 *
 	 * @param Parser $parser The parser in use.
-	 * @param PPTemplateFrame_Hash $frame The template frame in use.
+	 * @param PPFrame $frame The template frame in use.
 	 * @param array $args Function arguments:
 	 *              1: The template to call.
 	 *              2: The number of parameters to split on.
@@ -264,7 +268,7 @@ class Riven
 	 * Finds the first page that exists in the list of parameters.
 	 *
 	 * @param Parser $parser The parser in use.
-	 * @param PPTemplateFrame_Hash $frame The template frame in use.
+	 * @param PPFrame $frame The template frame in use.
 	 * @param array $args Function arguments:
 	 *        1+: All unnamed parameters are page names to search.
 	 *        if: A condition that must be true in order for this function to run.
@@ -323,7 +327,7 @@ class Riven
 	 * Checks for the existence of a page without tagging it as a Wanted Page.
 	 *
 	 * @param Parser $parser The parser in use.
-	 * @param PPTemplateFrame_Hash $frame The template frame in use.
+	 * @param PPFrame $frame The template frame in use.
 	 * @param array $args Function arguments:
 	 *         1: The page to look for.
 	 *         2: The return value if the page is found.
@@ -361,7 +365,7 @@ class Riven
 	 * Templates entries.
 	 *
 	 * @param Parser $parser The parser in use.
-	 * @param PPTemplateFrame_Hash $frame The template frame in use.
+	 * @param PPFrame $frame The template frame in use.
 	 * @param array $args Function arguments:
 	 *        1+: The names of the templates to include.
 	 *     debug: Set to PHP true to show the cleaned code on-screen during Show Preview. Set to 'always' to show even
@@ -409,7 +413,7 @@ class Riven
 	 * Randomly picks one or more entries from a list and displays it.
 	 *
 	 * @param Parser $parser The parser in use.
-	 * @param PPTemplateFrame_Hash $frame The template frame in use.
+	 * @param PPFrame $frame The template frame in use.
 	 * @param array $args Function arguments:
 	 *             1+: The values to pick from.
 	 *     allowempty: If set to true, will display empty entries along with separators.
@@ -474,7 +478,7 @@ class Riven
 	 * Picks a random number in the range provided.
 	 *
 	 * @param Parser $parser The parser in use.
-	 * @param PPTemplateFrame_Hash $frame The template frame in use.
+	 * @param PPFrame $frame The template frame in use.
 	 * @param array $args Function arguments:
 	 *        1: (See return)
 	 *        2: (See return)
@@ -538,7 +542,7 @@ class Riven
 	 * Repetitively calls a template with different parameters for each call.
 	 *
 	 * @param Parser $parser The parser in use.
-	 * @param PPTemplateFrame_Hash $frame The template frame in use.
+	 * @param PPFrame $frame The template frame in use.
 	 * @param array $args Function arguments:
 	 *              1: The template to call.
 	 *              2: The number of parameters to split on.
@@ -628,7 +632,7 @@ class Riven
 	 * Trims links from a block of text.
 	 *
 	 * @param Parser $parser The parser in use.
-	 * @param PPTemplateFrame_Hash $frame The template frame in use.
+	 * @param PPFrame $frame The template frame in use.
 	 * @param array $args Function arguments:
 	 *     mode: The only option currently is "smart", which uses the preprocessor to parse the code with near-perfect
 	 *           results.
@@ -649,7 +653,8 @@ class Riven
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
 		$helper = VersionHelper::getInstance();
 		$output = trim($frame->expand($values[0]));
-		if (ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART)) {
+		$smartMode = $frame instanceof PPTemplateFrame_Hash && ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART);
+		if ($smartMode) {
 			/** @todo Have another look at this. The original approach may actually be doable. */
 			// This was a lot simpler in the original implementation, working strictly by recursively parsing the root
 			// node. MW 1.28 changed the preprocessor to be unresponsive to changes to its nodes, however,
@@ -839,7 +844,6 @@ class Riven
 				$value = preg_replace('#(' . self::TAG_REGEX . ')\s*\Z#', '$1', $value, 1);
 			}
 
-			// show('Value: ', $value);
 			$output .= $value;
 			$node = $nextNode;
 		}
