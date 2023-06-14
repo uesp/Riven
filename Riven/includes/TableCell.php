@@ -1,6 +1,10 @@
 <?php
 class TableCell
 {
+	#region Private Constants
+	private const PREFIX_LEN = 9; // strlen(Parser::MARKER_SUFFIX) = 6 for MW < 1.27;
+	#endregion
+
 	#region Static Fields
 	/** @var string $colSpanRegex Regex to find a colspan. */
 	private static $colSpanRegex = '#\bcolspan\s*=\s*([\'"]?)(?<span>\d+)\1#';
@@ -32,9 +36,6 @@ class TableCell
 
 	/** @var int $colspan Reflection of the rowspan attribute */
 	public $rowspan;
-
-	/** @var ?string $trimmedContent The content after trimming out cruft. */
-	public $trimmedContent;
 	#endregion
 
 	#region Constructor
@@ -47,39 +48,14 @@ class TableCell
 	 * @param int $colspan How many columns the cell spans.
 	 * @param int $rowspan How many rows the cell spans.
 	 */
-	private function __construct(?string $content, string $attribs, bool $isHeader, ?TableCell $parent, int $colspan, int $rowspan, bool $cleanImages)
+	private function __construct(?string $content, string $attribs, bool $isHeader, ?TableCell $parent, int $colspan, int $rowspan)
 	{
-		$this->content = $content;
+		$this->content = html_entity_decode($content);
 		$this->attribs = $attribs;
 		$this->isHeader = $isHeader;
 		$this->parent = $parent;
 		$this->colspan = $colspan;
 		$this->rowspan = $rowspan;
-
-		$content = trim(html_entity_decode($this->content));
-		if ($cleanImages && !$this->isHeader) {
-			// Remove <img> tags
-			$content = preg_replace('#<img[^>]+?/>#', '', $content, -1, $imgCount);
-			$initialCount = $imgCount;
-			while ($imgCount > 0) {
-				// Removes any content-free open/close tags that used to surround the removed image.
-				$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $imgCount);
-			}
-
-			$content = trim($content);
-			$this->isImage = $initialCount && !strlen($content) && !$this->isHeader;
-		} else {
-			$this->isImage = false; // This may actually be true, but we don't care.
-		}
-
-		// Remove unassigned {{{parameter values}}}
-		$content = preg_replace('#\{{3}[^\}]+\}{3}#', '', $content, -1, $count);
-		while ($count > 0) {
-			// Removes any content-free open/close tags that used to surround the removed value.
-			$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $count);
-		}
-
-		$this->trimmedContent = trim($content);
 	}
 	#endregion
 
@@ -95,7 +71,6 @@ class TableCell
 				'colspan' => $this->colspan,
 				'rowspan' => $this->rowspan,
 				'content' => $this->content,
-				'trimmedContent' => $this->trimmedContent,
 				'isImage' => $this->isImage
 			];
 		}
@@ -112,7 +87,7 @@ class TableCell
 	 * @return ?TableCell
 	 *
 	 */
-	public static function FromMatch(array $match, bool $cleanImages): ?TableCell
+	public static function FromMatch(array $match): ?TableCell
 	{
 		if (!isset($match)) {
 			return null;
@@ -124,7 +99,7 @@ class TableCell
 		preg_match(self::$rowSpanRegex, $attribs, $rowspan);
 		$rowspan = $rowspan ? intval($rowspan['span']) : 1;
 
-		return new TableCell($match['content'], $attribs, $match['name'] === 'th', null, $colspan, $rowspan, $cleanImages);
+		return new TableCell($match['content'], $attribs, $match['name'] === 'th', null, $colspan, $rowspan);
 	}
 
 	/**
@@ -169,6 +144,42 @@ class TableCell
 		$name = $this->isHeader ? 'th' : 'td';
 		$attribs = strlen($this->attribs) > 0 ? ' ' . $this->attribs : '';
 		return "<$name$attribs>$this->content</$name>";
+	}
+
+	public function getTrimmedContent(bool $cleanImages): string
+	{
+		$content = $this->content;
+		if ($this->isHeader) {
+			$startPos = strpos($content, Parser::MARKER_PREFIX);
+			$endPos = $startPos ? strpos($content, Parser::MARKER_SUFFIX, $startPos + self::PREFIX_LEN) : false;
+			if ($startPos === false || $endPos === false) {
+				return $content;
+			}
+		}
+
+		if ($cleanImages && !$this->isHeader) {
+			// Remove <img> tags
+			$content = preg_replace('#<img[^>]+?/>#', '', $content, -1, $imgCount);
+			$initialCount = $imgCount;
+			while ($imgCount > 0) {
+				// Removes any content-free open/close tags that used to surround the removed image.
+				$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $imgCount);
+			}
+
+			$content = trim($content);
+			$this->isImage = $initialCount && !strlen($content) && !$this->isHeader;
+		} else {
+			$this->isImage = false; // This may actually be true, but we don't care.
+		}
+
+		// Remove unassigned {{{parameter values}}}
+		$content = preg_replace('#\{{3}[^\}]+\}{3}#', '', $content, -1, $count);
+		while ($count > 0) {
+			// Removes any content-free open/close tags that used to surround the removed value.
+			$content = preg_replace('#<(\w+)[^>]*>\s*</(\1)>#', '', $content, -1, $count);
+		}
+
+		return trim($content);
 	}
 
 	/**

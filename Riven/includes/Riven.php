@@ -682,8 +682,9 @@ class Riven
 	 *
 	 * @return TableRow[] A collection of TableCells that represents the table provided.
 	 */
-	private static function buildMap(string $input, bool $cleanImages): array
+	private static function buildMap(string $input): array
 	{
+		#RHshow('Input', $input);
 		/** @var TableRow[] map */
 		$map = [];
 		preg_match_all('#(<tr[^>]*>)(.*?)</tr\s*>#is', $input, $rawRows, PREG_SET_ORDER);
@@ -694,7 +695,7 @@ class Riven
 
 		foreach ($rawRows as $rowNum => $rawRow) {
 			preg_match_all('#<(?<name>t[dh])\s*(?<attribs>[^>]*)>(?<content>.*?)</\1\s*>#s', $rawRow[0], $rawCells, PREG_SET_ORDER);
-			$map[$rowNum]->addRawCells($map, $rowNum, $rawCells, $cleanImages);
+			$map[$rowNum]->addRawCells($map, $rowNum, $rawCells);
 		}
 
 		#RHshow('Map', $map);
@@ -707,14 +708,16 @@ class Riven
 	 * @param TableRow[] $map The table map to work on.
 	 * @param bool $cleanImages Whether to clean images in cells that aren't headers.
 	 *
-	 * @return TableCell[] A map of every cell in the table. Those with spans will appear as individual cells with a link
-	 * back to the home cell.
+	 * @return string The cleaned table as HTML.
 	 *
 	 */
-	private static function cleanRows(array $map): string
+	private static function cleanRows(array $map, bool $cleanImages): string
 	{
 		#RHshow('Map', $map);
 		$rowNum = count($map) - 1;
+		$headerRows = 0;
+		$prevWidth = PHP_INT_MAX;
+		$lastWasHeader = false;
 		$sectionHasContent = false; // Does the section have uncleaned rows?
 		$sectionHasRows = false; // Does the section have *any* normal rows, whether or not we clean them?
 		$prevWidth = PHP_INT_MAX;
@@ -722,52 +725,55 @@ class Riven
 			$row = $map[$rowNum];
 			$cleanType = $row->cleanType;
 			if ($cleanType === 'auto') {
-				if ($row->isHeader) {
-					$cleanType = ($rowNum === 0 && $row->width === 1 && $row->getColumnCount() > 1)
+				$cleanType = $row->isHeader
+					? (($rowNum === 0 && $row->cellCount === 1 && $row->getColumnCount() > 1)
 						? 'tableheader'
-						: 'header';
-				} else {
-					$cleanType = 'normal';
-				}
+						: 'header')
+					: ($row->hasContent
+						? 'normal'
+						: 'clean');
 			}
 
+			if ($lastWasHeader && (!$row->isHeader || $row->cellCount > $prevWidth)) {
+				// This looks like it's not part of the same group, so reset variables.
+				#RHecho('Row reset');
+				$sectionHasContent = false;
+				$sectionHasRows = false;
+				$prevWidth = PHP_INT_MAX;
+			}
+
+			#RHshow('Row ' . $cleanType, $row->toHtml(), "\nCell Count: ", $row->cellCount, '/', $prevWidth, ' ');
+			$cleanRow = false;
 			switch ($cleanType) {
 				case 'clean':
-					$cleanRow = true;
+				case 'keep':
+				case 'normal':
+					$sectionHasRows = true;
+					if ($cleanType === 'normal') {
+						$row->updateHasContent($cleanImages);
+						$cleanRow = !$row->hasContent;
+						$sectionHasContent |= $row->hasContent;
+					} else {
+						$cleanRow = $cleanType === 'clean';
+					}
+
 					break;
 				case 'header':
-					#RHshow('Width', $row->width, '/', $prevWidth, ' ', $row->toHtml());
-					if ($row->width < $prevWidth) {
-						$prevWidth = $row->width;
+					if ($row->cellCount < $prevWidth) {
+						$prevWidth = $row->cellCount;
 						#RHshow('Section has rows', $sectionHasRows, "\nSection has content: ", $sectionHasContent);
 						$cleanRow = $sectionHasRows && !$sectionHasContent;
-					} else {
-						// This header looks like it's not part of the same group, presumably some kind of fixed
-						// header, so reset variables to starting values and reparse the same row without advancing.
-						#RHecho('Reparse');
-						$sectionHasContent = false;
-						$sectionHasRows = false;
-						$prevWidth = PHP_INT_MAX;
-						continue 2;
 					}
 
 					break;
-				case 'normal':
-					if ($prevWidth < PHP_INT_MAX) {
-						// We've just transitioned off of a header row, so reset as needed.
-						$sectionHasContent = false;
-						$prevWidth = PHP_INT_MAX;
-					}
-
-					$cleanRow = !$row->hasContent;
-					$sectionHasContent |= $row->hasContent;
-					$sectionHasRows = true;
+				case 'tableheader':
+					$headerRows++;
 					break;
 				default:
-					$cleanRow = false;
 					break;
 			}
 
+			$lastWasHeader = $row->isHeader;
 			if ($cleanRow) {
 				$row->decrementRowspan();
 				unset($map[$rowNum]);
@@ -776,15 +782,7 @@ class Riven
 			$rowNum--;
 		}
 
-		$onlyHeaderRows = true;
-		foreach ($map as $rowNum => $row) {
-			if ($row->cleanType !== 'tableheader') {
-				$onlyHeaderRows = false;
-				break;
-			}
-		}
-
-		if ($onlyHeaderRows) {
+		if (count($map) === $headerRows) {
 			$map = [];
 		}
 
@@ -1080,7 +1078,7 @@ class Riven
 			$output .= substr($input, $offset, $match[1] - $offset);
 			$offset = $match[1] + strlen($match[0]);
 			if ($match[0][1] == '/') {
-				$output = self::cleanRows(self::buildMap($output, $cleanImages));
+				$output = self::cleanRows(self::buildMap($output), $cleanImages);
 				#RHshow('Clean Rows', $output);
 				break;
 			} else {

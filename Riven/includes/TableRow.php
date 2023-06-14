@@ -2,10 +2,6 @@
 
 class TableRow
 {
-	#region Private Constants
-	private const PREFIX_LEN = 9; // strlen(Parser::MARKER_SUFFIX) = 6 for MW < 1.27;
-	#endregion
-
 	#region Private Static Fields
 	private static $cleanTypeRegex = '#\bdata-cleantype\s*=\s*([\'"]?)(?<cleantype>\w+)\1#';
 	#endregion
@@ -30,7 +26,7 @@ class TableRow
 	public $cleanType;
 	public $hasContent = false;
 	public $isHeader = true;
-	public $width = 0;
+	public $cellCount = 0;
 	#endregion
 
 	#region Constructor
@@ -49,7 +45,15 @@ class TableRow
 	#endregion
 
 	#region Public Functions
-	public function addRawCells(array &$map, int $rowNum, array $rawCells, bool $cleanImages)
+	/**
+	 * [Description for addRawCells]
+	 *
+	 * @param TableRow[] $map
+	 * @param int $rowNum
+	 * @param string[][] $rawCells
+	 * @param bool $cleanImages
+	 */
+	public function addRawCells(array &$map, int $rowNum, array $rawCells): void
 	{
 		$cellNum = 0;
 		$rowCount = count($map);
@@ -58,12 +62,13 @@ class TableRow
 				$cellNum++;
 			}
 
-			$cell = TableCell::FromMatch($rawCell, $cleanImages);
+			$cell = TableCell::FromMatch($rawCell);
 			$this->setCell($cellNum, $cell);
 			$rowspan = $cell->rowspan;
 			$colspan = $cell->colspan;
 			#RHshow("Cell ($rowNum, $cellNum)", $cell);
 			if ($rowspan > 1 || $colspan > 1) {
+				// If cell is a span, add children that point back to the parent.
 				$spanCell = TableCell::SpanChild($cell);
 				for ($r = 0; $r < $rowspan; $r++) {
 					for ($c = 0; $c < $colspan; $c++) {
@@ -79,6 +84,8 @@ class TableRow
 				}
 			}
 
+			$this->isHeader &= $cell->isHeader;
+			$this->hasContent |= !$cell->isHeader && (bool)strlen(trim($cell->content));
 			$cellNum++;
 		}
 	}
@@ -102,21 +109,9 @@ class TableRow
 
 	public function setCell(int $col, TableCell $cell)
 	{
-		$this->isHeader &= $cell->isHeader;
-		$content = $cell->content;
-		$hasContent = !$cell->isHeader && strlen($cell->trimmedContent);
-		if (!$hasContent) {
-			$startPos = strpos($content, Parser::MARKER_PREFIX);
-			if ($startPos !== false) {
-				$hasContent = ($startPos >= 0) && strpos($content, Parser::MARKER_SUFFIX, $startPos + self::PREFIX_LEN) >= 0;
-			}
-		}
-
-		$this->hasContent |= $hasContent;
-
 		// Count cells, treating spans as a single cell.
 		if (!$cell->parent) {
-			$this->width++;
+			$this->cellCount++;
 		}
 
 		$this->cells[$col] = $cell;
@@ -133,5 +128,25 @@ class TableRow
 		}
 
 		return $output . "</tr>\n";
+	}
+
+	/**
+	 * [Description for updateHasContent]
+	 *
+	 * @param bool $cleanImages Whether to clean images from data cells before deciding if a row has content.
+	 */
+	public function updateHasContent(bool $cleanImages): void
+	{
+		$hasContent = false;
+		foreach ($this->cells as $cell) {
+			if (is_null($cell->parent) && !$cell->isHeader) {
+				// Don't clean images that take up more than one cell in a non-header row; treat as always wanted.
+				$protectedImage = $cell->colspan > 1;
+				$trimmedContent = $cell->getTrimmedContent($cleanImages && !$protectedImage);
+				$hasContent |= strlen($trimmedContent);
+			}
+		}
+
+		$this->hasContent = $hasContent;
 	}
 }
