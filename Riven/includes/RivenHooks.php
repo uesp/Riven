@@ -49,13 +49,11 @@ class RivenHooks /* implements
 	 */
 	public static function onParserFirstCallInit(Parser $parser): void
 	{
-		/* Force parser to use Preprocessor_Hash, if it isn't already, since this entire extension is predicated on
-		 * that assumption. In later versions, Preprocessor_Hash is the only built-in option anyway. This should work
-		 * up to 1.35. In 1.36, they change mPreprocessor to private. At that point, we can probably override this
-		 * through reflection. It doesn't look like there are any other options, since even in a derived class, we
-		 * can't set the private mPreprocessor property.
+		/* Force parser to use Preprocessor_Hash if it isn't already since this entire extension is predicated on that
+		 * assumption. In later versions, Preprocessor_Hash is the only built-in option anyway. This should work up to
+		 * 1.34. After that, PPNode_DOM no longer exists, so PPNode_Hash should always be in use.
 		 */
-		if ($parser->mPreprocessor instanceof PPNode_DOM) {
+		if ($parser->getPreprocessor() instanceof PPNode_DOM) {
 			$parser->mPreprocessor = new Preprocessor_Hash($parser);
 		}
 
