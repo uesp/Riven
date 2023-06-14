@@ -1146,8 +1146,6 @@ class Riven
 	 */
 	private static function trimLinksParseNode(Parser $parser, PPFrame $frame, PPNode $node): string
 	{
-		echo ('Hello');
-		RHDebug::echo('Hello');
 		if (self::isLink($node)) {
 			// show($node->value);
 			$close = strrpos($node->value, ']]');
@@ -1171,7 +1169,6 @@ class Riven
 					if (!is_null($subText)) {
 						$subDom = $parser->preprocessToDom($subText);
 						$subText = self::trimLinksParseNode($parser, $frame, $subDom);
-						RHDebug::show("[[$title|$subText]]$after");
 						return "[[$title|$subText]]$after";
 					}
 				} elseif ($leadingColon || !in_array($ns, [NS_CATEGORY, NS_SPECIAL])) {
