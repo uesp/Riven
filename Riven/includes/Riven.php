@@ -294,11 +294,16 @@ class Riven
 			return '';
 		}
 
-		// Build unique titles with simple nested loop, since count is unlikely to ever be large.
+		// This is a bit kludgey, but the idea is that we want to avoid this being counted as expensive, possibly
+		// several times, so we first eliminate any duplicate titles, then check if they exist. Note that the
+		// elimination algorithm is naive and ~O(n^2), but the number of values is expected to always be negligible. If
+		// needed, a limiter could be added to make sure that's the case.
 		$uniqueTitles = [];
+		$titleTexts = [];
 		foreach ($values as $value) {
 			$titleText = trim($frame->expand($value));
 			$title = Title::newFromText($titleText);
+			VersionHelper::getInstance()->findVariantLink($parser, $titleText, $title, true);
 			if ($title) {
 				$found = false;
 				foreach ($uniqueTitles as $unique) {
@@ -309,15 +314,15 @@ class Riven
 				}
 
 				if (!$found) {
-					$uniqueTitles[] = $title;
+					$titleTexts[] = $titleText;
 				}
 			}
 		}
 
-		foreach ($uniqueTitles as $title) {
-			if (self::existsCommon($parser, $title)) {
-				return $title->getPrefixedText();
-			}
+		foreach ($uniqueTitles as $titleText) {
+			return self::findTitle($parser, $titleText)
+				? $titleText
+				: '';
 		}
 
 		return '';
@@ -354,7 +359,7 @@ class Riven
 		}
 
 		$titleText = trim($frame->expand($values[0] ?? ''));
-		$index = self::existsCommon($parser, Title::newFromText($titleText)) ? 1 : 2;
+		$index = is_null(self::findTitle($parser, $titleText)) ? 2 : 1;
 		return isset($values[$index])
 			? trim($frame->expand($values[$index]))
 			: '';
@@ -395,12 +400,12 @@ class Riven
 		$output = '';
 		foreach ($values as $titleText) {
 			$titleText = trim($frame->expand($titleText));
-			$title = Title::newFromText($titleText, NS_TEMPLATE);
-			if (self::existsCommon($parser, $title)) {
+			$title = self::findTitle($parser, $titleText, NS_TEMPLATE);
+			if (!is_null($title)) {
 				// show('Exists!');
-				$outTitle = $title->getNamespace() == NS_TEMPLATE
+				$outTitle = $title->getNamespace() === NS_TEMPLATE
 					? $title->getText()
-					: $title->getFullText();
+					: $title->getPrefixedText();
 				$output .= '{{' . $outTitle . '}}';
 			}
 		}
@@ -653,7 +658,7 @@ class Riven
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
 		$helper = VersionHelper::getInstance();
 		$output = trim($frame->expand($values[0]));
-		$smartMode = $frame instanceof PPTemplateFrame_Hash && ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART);
+		$smartMode = $frame instanceof PPFrame_Hash && ParserHelper::magicKeyEqualsValue($magicArgs, self::NA_MODE, self::AV_SMART);
 		if ($smartMode) {
 			/** @todo Have another look at this. The original approach may actually be doable. */
 			// This was a lot simpler in the original implementation, working strictly by recursively parsing the root
@@ -663,12 +668,14 @@ class Riven
 			$output = self::trimLinksParseNode($parser, $frame, $rootNode);
 			$output = $helper->getStripState($parser)->unstripBoth($output);
 		} else {
-			$output = $parser->replaceInternalLinks($output);
 			$output = $helper->getStripState($parser)->unstripBoth($output);
+			$output = VersionHelper::getInstance()->handleInternalLinks($parser, $output);
 			$output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
 			$output = preg_replace('#<a\ href=[^>]+ title="(.*?)"><img\ [^>]+></a>#', '\1', $output);
 			$output = preg_replace('#<a\ href=[^>]+ title="[^"]*?">(.+?)</a>#', '\1', $output);
 			$output = preg_replace('#<a\ href=[^>]+>(<img\ [^>]+>)?</a>#', '', $output);
+			$output = "<nowiki/>$output<nowiki/>";
+			RHDebug::echo('Hello');
 		}
 
 		$output = $helper->replaceLinkHoldersText($parser, $output);
@@ -888,41 +895,37 @@ class Riven
 	 * @param Parser $parser The parser in use.
 	 * @param ?Title $title The title to search for.
 	 *
-	 * @return bool True if the file was found; otherwise, false.
-	 *
+	 * @return ?Title True if the file was found; otherwise, false.
 	 */
-	private static function existsCommon(Parser $parser, ?Title $title): bool
+	private static function findTitle(Parser $parser, string $titleText, int $defaultNs = NS_MAIN): ?Title
 	{
+		// Derived from ParserFunctions #ifexist code.
+		$title = Title::newFromText($titleText, $defaultNs);
+		VersionHelper::getInstance()->findVariantLink($parser, $titleText, $title, true);
 		if (!$title || $title->isExternal()) {
-			return false;
-		}
-
-		$parser->getFunctionLang()->findVariantLink($titleText, $title, true);
-		if (!$title) {
-			return false;
+			return null;
 		}
 
 		$ns = $title->getNamespace();
 		switch ($ns) {
 			case NS_SPECIAL:
-				return SpecialPageFactory::exists($title->getDBkey());
+				return VersionHelper::getInstance()->specialPageExists($title)
+					? $title
+					: null;
 			case NS_MEDIA:
-				if ($parser->incrementExpensiveFunctionCount()) {
-					$file = RepoGroup::singleton()->getLocalRepo()->newFile($title);
-					if ($file) {
-						return $file->exists();
-					}
-				}
-
-				return false;
+				return $parser->incrementExpensiveFunctionCount() && VersionHelper::getInstance()->fileExists($title)
+					? $title
+					: null;
 			default:
 				$pdbk = $title->getPrefixedDBkey();
 				$linkCache = MediaWikiServices::getInstance()->getLinkCache();
-				return
-					$linkCache->getGoodLinkID($pdbk) !== 0 ||
-					(!$linkCache->isBadLink($pdbk) &&
-						$parser->incrementExpensiveFunctionCount() &&
-						$title->getArticleID() != 0);
+				if ($linkCache->getGoodLinkID($pdbk)) {
+					return $title;
+				}
+
+				return (!$linkCache->isBadLink($pdbk) && $parser->incrementExpensiveFunctionCount() && $title->getArticleID())
+					? $title
+					: null;
 		}
 	}
 
@@ -1143,6 +1146,8 @@ class Riven
 	 */
 	private static function trimLinksParseNode(Parser $parser, PPFrame $frame, PPNode $node): string
 	{
+		echo ('Hello');
+		RHDebug::echo('Hello');
 		if (self::isLink($node)) {
 			// show($node->value);
 			$close = strrpos($node->value, ']]');
@@ -1160,16 +1165,16 @@ class Riven
 			}
 
 			if ($leadingColon || !$title->isExternal()) {
-				if (in_array($ns, [NS_FILE, NS_MEDIA])) {
+				if (!$leadingColon && in_array($ns, [NS_FILE, NS_MEDIA])) {
 					$after = substr($node->value, $close + 2);
 					$subText = $split[1] ?? null;
 					if (!is_null($subText)) {
 						$subDom = $parser->preprocessToDom($subText);
 						$subText = self::trimLinksParseNode($parser, $frame, $subDom);
-						// If display text was provided, preserve formatting but put self-closed nowikis at each end to break any accidental formatting that results.
+						RHDebug::show("[[$title|$subText]]$after");
 						return "[[$title|$subText]]$after";
 					}
-				} elseif (!in_array($ns, [NS_CATEGORY, NS_SPECIAL])) {
+				} elseif ($leadingColon || !in_array($ns, [NS_CATEGORY, NS_SPECIAL])) {
 					$after = substr($node->value, $close + 2);
 					$subText = $split[1] ?? null;
 					if (is_null($subText)) {
