@@ -53,8 +53,8 @@ class RivenHooks /* implements
 		 * assumption. In later versions, Preprocessor_Hash is the only built-in option anyway. This should work up to
 		 * 1.34. After that, PPNode_DOM no longer exists, so PPNode_Hash should always be in use.
 		 */
-		if ($parser->getPreprocessor() instanceof PPNode_DOM) {
-			$parser->mPreprocessor = new Preprocessor_Hash($parser);
+		if (get_class($parser->getPreprocessor()) === 'PPNode_DOM') {
+			VersionHelper::getInstance()->setPreprocessor($parser, new Preprocessor_Hash($parser));
 		}
 
 		self::initParserFunctions($parser);
@@ -78,11 +78,7 @@ class RivenHooks /* implements
 		switch ($magicWordId) {
 			case self::VR_SKINNAME:
 				$ret = Riven::doSkinName($parser);
-
-				// Cached, but only for the current request (presumably), since user could change their settings at any
-				// time.
 				$variableCache[$magicWordId] = $ret;
-				$parser->getOutput()->updateCacheExpiry(5);
 		}
 
 		return true;
