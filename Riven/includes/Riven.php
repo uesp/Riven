@@ -20,6 +20,7 @@ class Riven
 	public const AV_TOP       = 'riven-top';
 
 	public const NA_ALLOWEMPTY = 'riven-allowempty';
+	public const NA_CACHETIME   = 'riven-cachetime';
 	public const NA_CLEANIMG   = 'riven-cleanimages';
 	public const NA_DELIMITER  = 'riven-delimiter';
 	public const NA_EXPLODE    = 'riven-explode';
@@ -319,10 +320,10 @@ class Riven
 			}
 		}
 
-		foreach ($uniqueTitles as $titleText) {
-			return self::findTitle($parser, $titleText)
-				? $titleText
-				: '';
+		foreach ($titleTexts as $titleText) {
+			if (self::findTitle($parser, $titleText)) {
+				return $titleText;
+			}
 		}
 
 		return '';
@@ -436,6 +437,7 @@ class Riven
 		static $magicWords;
 		$magicWords = $magicWords ?? new MagicWordArray([
 			self::NA_ALLOWEMPTY,
+			self::NA_CACHETIME,
 			self::NA_SEED,
 			ParserHelper::NA_IF,
 			ParserHelper::NA_IFNOT,
@@ -474,7 +476,8 @@ class Riven
 			}
 		}
 
-		$parser->getOutput()->updateCacheExpiry(0);
+		$cacheExpiry = isset($magicArgs[self::NA_CACHETIME]) ? (int)$magicArgs[self::NA_CACHETIME] : 0;
+		$parser->getOutput()->updateCacheExpiry($cacheExpiry);
 		$separator = ParserHelper::getSeparator($magicArgs);
 		return implode($separator, $retval);
 	}
@@ -499,7 +502,7 @@ class Riven
 	{
 		$parser->addTrackingCategory(self::TRACKING_RAND);
 		static $magicWords;
-		$magicWords = $magicWords ?? new MagicWordArray([self::NA_SEED]);
+		$magicWords = $magicWords ?? new MagicWordArray([self::NA_CACHETIME, self::NA_SEED]);
 
 		/** @var array $magicArgs */
 		/** @var array $values */
@@ -514,16 +517,18 @@ class Riven
 
 		$low = strlen($low) ? (int)$low : 1;
 		$high = strlen($high) ? (int)$high : 6;
-		if ($low == $high) {
+		if ($low === $high) {
 			return $low;
 		}
 
-		// We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based
-		// seed from a previous rand/pickfrom will cause all subsequent seedless calls to either function to only
-		// generate hourly results).
-		isset($magicArgs[self::NA_SEED]) ? mt_srand((int)$magicArgs[self::NA_SEED]) : mt_srand();
+		// We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based seed
+		// from a previous rand/pickfrom will cause all subsequent seedless calls to generate hourly results).
+		isset($magicArgs[self::NA_SEED])
+			? mt_srand((int)$magicArgs[self::NA_SEED])
+			: mt_srand();
+		$cacheExpiry = isset($magicArgs[self::NA_CACHETIME]) ? (int)$magicArgs[self::NA_CACHETIME] : 0;
 
-		$parser->getOutput()->updateCacheExpiry(0);
+		$parser->getOutput()->updateCacheExpiry($cacheExpiry);
 		return ($low > $high)
 			? mt_rand($high, $low)
 			: mt_rand($low, $high);
@@ -539,7 +544,7 @@ class Riven
 	public static function doSkinName(Parser $parser): string
 	{
 		$parser->addTrackingCategory(self::TRACKING_SKINNAME);
-		$parser->getOutput()->updateCacheExpiry(0);
+		$parser->getOutput()->updateCacheExpiry(0); // Could be changed at any time so invalidate cache
 		return RequestContext::getMain()->getSkin()->getSkinName();
 	}
 
@@ -675,7 +680,6 @@ class Riven
 			$output = preg_replace('#<a\ href=[^>]+ title="[^"]*?">(.+?)</a>#', '\1', $output);
 			$output = preg_replace('#<a\ href=[^>]+>(<img\ [^>]+>)?</a>#', '', $output);
 			$output = "<nowiki/>$output<nowiki/>";
-			RHDebug::echo('Hello');
 		}
 
 		$output = $helper->replaceLinkHoldersText($parser, $output);
