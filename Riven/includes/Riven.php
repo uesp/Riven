@@ -679,7 +679,6 @@ class Riven
 			$output = preg_replace('#<a\ href=[^>]+ title="(.*?)"><img\ [^>]+></a>#', '\1', $output);
 			$output = preg_replace('#<a\ href=[^>]+ title="[^"]*?">(.+?)</a>#', '\1', $output);
 			$output = preg_replace('#<a\ href=[^>]+>(<img\ [^>]+>)?</a>#', '', $output);
-			$output = "<nowiki/>$output<nowiki/>";
 		}
 
 		$output = $helper->replaceLinkHoldersText($parser, $output);
