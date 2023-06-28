@@ -143,7 +143,7 @@ class TableRow
 				// Don't clean images that take up more than one cell in a non-header row; treat as always wanted.
 				$protectedImage = $cell->colspan > 1;
 				$trimmedContent = $cell->getTrimmedContent($cleanImages && !$protectedImage);
-				$hasContent |= strlen($trimmedContent);
+				$hasContent |= (bool)strlen($trimmedContent);
 			}
 		}
 
