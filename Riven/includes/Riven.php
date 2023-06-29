@@ -458,7 +458,9 @@ class Riven
 
 		// We have to init every time otherwise previous seeds will affect current results (e.g., an hour-based
 		// seed will cause all subsequent parameterless calls to mt_srand() to only generate hourly results).
-		isset($seed) ? mt_srand((int)$seed) : mt_srand();
+		isset($magicArgs[self::NA_SEED])
+			? mt_srand((int)$magicArgs[self::NA_SEED])
+			: mt_srand();
 
 		// This makes the untested assumption that:
 		//     shuffle(all values) then expand(needed values) will be significantly faster than
