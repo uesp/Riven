@@ -462,9 +462,6 @@ class Riven
 			? mt_srand((int)$magicArgs[self::NA_SEED])
 			: mt_srand();
 
-		// This makes the untested assumption that:
-		//     shuffle(all values) then expand(needed values) will be significantly faster than
-		//     expand(all values) then shuffle(needed values)
 		shuffle($values);
 		$allowEmpty = $magicArgs[self::NA_ALLOWEMPTY] ?? false;
 		$retval = [];
