@@ -162,7 +162,7 @@ class Riven
 			$parser->getTitle()->getNamespace() == NS_TEMPLATE &&
 			!$parser->getOptions()->getIsPreview()
 		) {
-			return $content;
+			return [$content];
 		}
 
 		static $magicWords;
@@ -254,7 +254,7 @@ class Riven
 				: $magicArgs[self::NA_DELIMITER] ?? ','
 		);
 
-		$values = $frame->expand($values[2] ?? '');
+		$values = trim($frame->expand($values[2] ?? ''));
 		$values = explode($delimiter, $values);
 
 		#RHshow('Template Name', $templateName);
@@ -1131,8 +1131,6 @@ class Riven
 		// show("Templates:\n", $templates);
 		$separator = ParserHelper::getSeparator($magicArgs);
 		$output = implode($separator, $templates);
-		// show("Output:\n", $output);
-
 		$debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
 		return ParserHelper::formatPFForDebug($output, $debug);
 	}
