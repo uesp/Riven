@@ -77,6 +77,8 @@ class Riven
 	 */
 	public static function doCleanSpace(string $content, array $attributes, Parser $parser, PPFrame $frame)
 	{
+		// Cleanspace used to clean categories and trails when used on template pages. That has been removed, as it's
+		// non-obvious to most editors and is better handled by nocat-type template code.
 		static $magicWords;
 		static $modeWords;
 		$magicWords = $magicWords ?? new MagicWordArray([
@@ -122,18 +124,7 @@ class Riven
 			return ParserHelper::formatTagForDebug($retval, true);
 		}
 
-		// Categories and trails are stripped on ''any'' template page, not just when directly calling the template
-		// (but not in preview mode).
-		$helper = VersionHelper::getInstance();
-		if ($helper->getParserNamespace($parser) === NS_TEMPLATE) {
-			// Save categories before processing.
-			$precats = $parser->getOutput()->getCategories();
-			$retval = $parser->recursiveTagParse($retval, $frame);
-			// Reset categories to the pre-processing list to remove any new categories.
-			$helper->setCategories($parser->getOutput(), $precats);
-		} else {
-			$retval = $parser->recursiveTagParse($retval, $frame);
-		}
+		$retval = $parser->recursiveTagParse($retval, $frame);
 
 		return [$retval, 'markerType' => 'general'];
 	}
@@ -861,9 +852,8 @@ class Riven
 	}
 
 	/**
-	 * Cleans the text according to the original regex-based approach. This no longer includes the breadcrumb
-	 * functionality from the original MetaTemplate, as that no longer seems to apply to the trails. Looking through
-	 * the history, I'm not sure if it ever did.
+	 * Cleans the text according to the original regex-based approach, minus the category/trail handling, as noted in
+	 * doCleanspace().
 	 *
 	 * @param string $text The original text inside the <cleanspace> tags.
 	 *
