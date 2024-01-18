@@ -124,12 +124,13 @@ class Riven
 
 		// Categories and trails are stripped on ''any'' template page, not just when directly calling the template
 		// (but not in preview mode).
-		if ($parser->getTitle()->getNamespace() === NS_TEMPLATE) {
+		$helper = VersionHelper::getInstance();
+		if ($helper->getParserNamespace($parser) === NS_TEMPLATE) {
 			// Save categories before processing.
 			$precats = $parser->getOutput()->getCategories();
 			$retval = $parser->recursiveTagParse($retval, $frame);
 			// Reset categories to the pre-processing list to remove any new categories.
-			$parser->getOutput()->setCategoryLinks($precats);
+			$helper->setCategories($parser->getOutput(), $precats);
 		} else {
 			$retval = $parser->recursiveTagParse($retval, $frame);
 		}
@@ -155,11 +156,12 @@ class Riven
 	{
 		#RHshow('doCleanTable wiki text', $content);
 
+		$helper = VersionHelper::getInstance();
 		// This ensures that tables are not cleaned if being displayed directly on the Template page.
 		// Previewing will process cleantable normally.
 		if (
 			$frame->depth == 0 &&
-			$parser->getTitle()->getNamespace() == NS_TEMPLATE &&
+			$helper->getParserNamespace($parser) === NS_TEMPLATE &&
 			!$parser->getOptions()->getIsPreview()
 		) {
 			return [$content];
@@ -177,7 +179,7 @@ class Riven
 		$text = $parser->recursiveTagParse($content, $frame);
 		#RHshow('Tag Parsed', $text);
 
-		$text = VersionHelper::getInstance()->getStripState($parser)->unstripNoWiki($text);
+		$text = $helper->getStripState($parser)->unstripNoWiki($text);
 		$offset = 0;
 		$output = '';
 		$lastVal = null;
@@ -187,7 +189,7 @@ class Riven
 			$output .= $lastVal;
 		} while ($lastVal);
 
-		$output = VersionHelper::getInstance()->getStripState($parser)->unstripGeneral($output);
+		$output = $helper->getStripState($parser)->unstripGeneral($output);
 		$after = substr($text, $offset);
 		$output .= $after;
 
@@ -656,7 +658,7 @@ class Riven
 
 		static $magicWords;
 		$magicWords = $magicWords ?? new MagicWordArray([self::NA_MODE]);
-		$flag = Parser::PTD_FOR_INCLUSION; // was: $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
+		$flag = VersionHelper::FOR_INCLUSION; // was: $frame->depth ? Parser::PTD_FOR_INCLUSION : 0;
 
 		/** @var array $magicArgs */
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
@@ -673,7 +675,7 @@ class Riven
 			$output = $helper->getStripState($parser)->unstripBoth($output);
 		} else {
 			$output = $helper->getStripState($parser)->unstripBoth($output);
-			$output = VersionHelper::getInstance()->handleInternalLinks($parser, $output);
+			$output = $helper->handleInternalLinks($parser, $output);
 			$output = preg_replace('#<a\ [^>]+selflink[^>]+>(.*?)</a>#', '$1', $output);
 			$output = preg_replace('#<a\ href=[^>]+ title="(.*?)"><img\ [^>]+></a>#', '\1', $output);
 			$output = preg_replace('#<a\ href=[^>]+ title="[^"]*?">(.+?)</a>#', '\1', $output);
@@ -901,9 +903,10 @@ class Riven
 	 */
 	private static function findTitle(Parser $parser, string $titleText, int $defaultNs = NS_MAIN): ?Title
 	{
+		$helper = VersionHelper::getInstance();
 		// Derived from ParserFunctions #ifexist code.
 		$title = Title::newFromText($titleText, $defaultNs);
-		VersionHelper::getInstance()->findVariantLink($parser, $titleText, $title, true);
+		$helper->findVariantLink($parser, $titleText, $title, true);
 		if (!$title || $title->isExternal()) {
 			return null;
 		}
@@ -911,11 +914,11 @@ class Riven
 		$ns = $title->getNamespace();
 		switch ($ns) {
 			case NS_SPECIAL:
-				return VersionHelper::getInstance()->specialPageExists($title)
+				return $helper->specialPageExists($title)
 					? $title
 					: null;
 			case NS_MEDIA:
-				return $parser->incrementExpensiveFunctionCount() && VersionHelper::getInstance()->fileExists($title)
+				return $parser->incrementExpensiveFunctionCount() && $helper->fileExists($title)
 					? $title
 					: null;
 			default:
