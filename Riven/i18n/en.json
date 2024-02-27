@@ -2,6 +2,7 @@
 	"@metadata": {
 		"authors": []
 	},
+	"riven-sortable-pattern": "^\\s*(A|An|The)\\s+(.*)",
 	"riven-tracking-arg": "Riven-Pages using arg",
 	"riven-tracking-arg-desc": "The page uses the <code><nowiki>{{#arg}}</nowiki></code> function.",
 	"riven-tracking-pickfrom": "Riven-Pages using pickfrom",

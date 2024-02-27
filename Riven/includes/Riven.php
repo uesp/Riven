@@ -14,6 +14,7 @@ use MediaWiki\MediaWikiServices;
  */
 class Riven
 {
+	#region Public Constants
 	public const AV_ORIGINAL  = 'riven-original';
 	public const AV_RECURSIVE = 'riven-recursive';
 	public const AV_SMART     = 'riven-smart';
@@ -26,13 +27,16 @@ class Riven
 	public const NA_EXPLODE    = 'riven-explode';
 	public const NA_MODE       = 'riven-mode';
 	public const NA_SEED       = 'riven-seed';
+	#endregion
 
+	#region Private Constants
 	private const TRACKING_ARG      = 'riven-tracking-arg';
 	private const TRACKING_PICKFROM = 'riven-tracking-pickfrom';
 	private const TRACKING_RAND     = 'riven-tracking-rand';
 	private const TRACKING_SKINNAME = 'riven-tracking-skinname';
 
 	private const TAG_REGEX = '</?[0-9A-Za-z]+(\s[^>]*)?>';
+	#endregion
 
 	/**
 	 * Retrieves an argument from the URL.
@@ -45,12 +49,10 @@ class Riven
 	 *
 	 * @return ?string The value found or the default value. Failing all else,
 	 */
-	public static function doArg(Parser $parser, PPFrame $frame, array $args): ?string
+	public static function doArg(Parser $parser, $arg, $default = ''): ?string
 	{
 		$parser->addTrackingCategory(self::TRACKING_ARG);
 		$parser->getOutput()->updateCacheExpiry(0);
-		$arg = $frame->expand($args[0]);
-		$default = isset($args[1]) ? $frame->expand($args[1]) : '';
 		$request = RequestContext::getMain()->getRequest();
 		return $request->getVal($arg, $default);
 	}
@@ -409,6 +411,41 @@ class Riven
 	}
 
 	/**
+	 * Removes any single set of paranthetical text from the end of a string.
+	 *
+	 * @param Parser $parser The parser in use.
+	 * @param string $text The text to examine.
+	 *
+	 * @return string The provided text minus any parenthetical text.
+	 *
+	 */
+	public static function doLabel(Parser $parser, string $text)
+	{
+		return self::removeDisambig($text);
+	}
+
+	/**
+	 * Returns the subpagename of the page provided with any single set of parenthetical text removed.
+	 *
+	 * @param Parser $parser The parser in use.
+	 * @param string|null $pagename The page name to examine (or the parser's title if null).
+	 *
+	 * @return string The cleaned page name or an empty string if the page name represented an invalid title.
+	 *
+	 */
+	public static function doLabelName(Parser $parser, string $pagename = null)
+	{
+		// For now, both possibilities return a Title, so this is valid. May need changed in later versions.
+		/** @var Title $title */
+		$title = is_null($pagename)
+			? VersionHelper::getInstance()->getParserTitle($parser)
+			: Title::newFromText($pagename);
+		return ($title)
+			? self::removeDisambig($title->getSubpageText())
+			: '';
+	}
+
+	/**
 	 * Randomly picks one or more entries from a list and displays it.
 	 *
 	 * @param Parser $parser The parser in use.
@@ -538,6 +575,23 @@ class Riven
 		$parser->addTrackingCategory(self::TRACKING_SKINNAME);
 		$parser->getOutput()->updateCacheExpiry(0); // Could be changed at any time so invalidate cache
 		return RequestContext::getMain()->getSkin()->getSkinName();
+	}
+
+	/**
+	 * Moves starting words that can be ignored when sorting (e.g., "A", "An", and "The") to the end of the text. This is language-specific via the standard translation methods and can be altered by editing MediaWiki:riven-sortable-pattern.
+	 *
+	 * @param Parser $parser The parser in use.
+	 * @param string $text The text to examine.
+	 *
+	 * @return string The altered text.
+	 *
+	 */
+	public static function doSortable(Parser $parser, $text = ''): string
+	{
+		$regex = wfMessage('riven-sortable-pattern')->inContentLanguage()->text();
+		return preg_match("/$regex/", $text, $matches)
+			? $matches[2] . ', ' . $matches[1]
+			: $text;
 	}
 
 	/**
@@ -1093,6 +1147,19 @@ class Riven
 
 		#RHshow('Output', $output);
 		return $output;
+	}
+
+	/**
+	 * Removes any single set of paranthetical text from the end of a string.
+	 *
+	 * @param string $text The text to examine.
+	 *
+	 * @return string The provided text minus any parenthetical text.
+	 *
+	 */
+	private static function removeDisambig(string $text): string
+	{
+		return preg_replace('/\s*\([^\)]+\)\s*$/', '', $text);
 	}
 
 	/**

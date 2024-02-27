@@ -11,20 +11,26 @@
 class RivenHooks /* implements
 	\MediaWiki\Hook\ParserFirstCallInitHook */
 {
+	// Parser Functions
 	public const PF_ARG         = 'arg'; // From DynamicFunctions
 	public const PF_EXPLODEARGS = 'explodeargs';
 	public const PF_FINDFIRST   = 'findfirst';
 	public const PF_IFEXISTX    = 'ifexistx';
 	public const PF_INCLUDE     = 'include';
+	public const PF_LABEL       = 'label';
+	public const PF_LABELNAME   = 'LABELNAME';
 	public const PF_PICKFROM    = 'pickfrom';
 	public const PF_RAND        = 'rand'; // From DynamicFunctions
+	public const PF_SORTABLE    = 'sortable';
 	public const PF_SPLITARGS   = 'splitargs';
 	public const PF_TRIMLINKS   = 'trimlinks';
 
-	public const TG_CLEANSPACE = 'cleanspace';
-	public const TG_CLEANTABLE = 'cleantable';
+	// Tags
+	public const TG_CLEANSPACE  = 'cleanspace';
+	public const TG_CLEANTABLE  = 'cleantable';
 
-	public const VR_SKINNAME = 'skinname'; // From DynamicFunctions
+	// Variables
+	public const VR_SKINNAME    = 'skinname'; // From DynamicFunctions
 
 	/**
 	 * Register variables.
@@ -36,6 +42,7 @@ class RivenHooks /* implements
 	 */
 	public static function onMagicWordwgVariableIDs(array &$aCustomVariableIds): void
 	{
+		$aCustomVariableIds[] = self::PF_LABELNAME;
 		$aCustomVariableIds[] = self::VR_SKINNAME;
 	}
 
@@ -76,11 +83,16 @@ class RivenHooks /* implements
 	public static function onParserGetVariableValueSwitch(Parser $parser, array &$variableCache, $magicWordId, &$ret, PPFrame $frame): bool
 	{
 		switch ($magicWordId) {
+			case self::PF_LABELNAME:
+				$ret = Riven::doLabelName($parser);
+				break;
 			case self::VR_SKINNAME:
 				$ret = Riven::doSkinName($parser);
-				$variableCache[$magicWordId] = $ret;
+			default:
+				return true;
 		}
 
+		$variableCache[$magicWordId] = $ret;
 		return true;
 	}
 
@@ -94,15 +106,18 @@ class RivenHooks /* implements
 	 */
 	private static function initParserFunctions(Parser $parser): void
 	{
-		$parser->setFunctionHook(self::PF_ARG, 'Riven::doArg', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(self::PF_EXPLODEARGS, 'Riven::doExplodeargs', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(self::PF_FINDFIRST, 'Riven::doFindFirst', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(self::PF_IFEXISTX, 'Riven::doIfExistX', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(self::PF_INCLUDE, 'Riven::doInclude', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(self::PF_PICKFROM, 'Riven::doPickFrom', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(self::PF_RAND, 'Riven::doRand', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(self::PF_SPLITARGS, 'Riven::doSplitargs', SFH_OBJECT_ARGS);
-		$parser->setFunctionHook(self::PF_TRIMLINKS, 'Riven::doTrimLinks', SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_ARG,         'Riven::doArg');
+		$parser->setFunctionHook(self::PF_EXPLODEARGS, 'Riven::doExplodeargs', Parser::SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_FINDFIRST,   'Riven::doFindFirst', Parser::SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_IFEXISTX,    'Riven::doIfExistX', Parser::SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_INCLUDE,     'Riven::doInclude', Parser::SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_LABEL,       'Riven::doLabel');
+		$parser->setFunctionHook(self::PF_LABELNAME,   'Riven::doLabelName', Parser::SFH_NO_HASH);
+		$parser->setFunctionHook(self::PF_PICKFROM,    'Riven::doPickFrom', Parser::SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_RAND,        'Riven::doRand', Parser::SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_SORTABLE,    'Riven::doSortable');
+		$parser->setFunctionHook(self::PF_SPLITARGS,   'Riven::doSplitargs', Parser::SFH_OBJECT_ARGS);
+		$parser->setFunctionHook(self::PF_TRIMLINKS,   'Riven::doTrimLinks', Parser::SFH_OBJECT_ARGS);
 	}
 
 	/**
