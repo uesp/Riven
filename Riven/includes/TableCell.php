@@ -50,7 +50,7 @@ class TableCell
 	 */
 	private function __construct(?string $content, string $attribs, bool $isHeader, ?TableCell $parent, int $colspan, int $rowspan)
 	{
-		$this->content = html_entity_decode($content);
+		$this->content = $content;
 		$this->attribs = $attribs;
 		$this->isHeader = $isHeader;
 		$this->parent = $parent;
