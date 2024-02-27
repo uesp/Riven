@@ -184,7 +184,7 @@ class Riven
 		$after = substr($text, $offset);
 		$output .= $after;
 
-		$debug = ParserHelper::checkDebugMagic($parser, $frame, $attributes);
+		$debug = ParserHelper::checkDebugMagic($parser, $attributes);
 		return $debug
 			? ['<pre>' . htmlspecialchars($output) . '</pre>', 'markerType' => 'nowiki']
 			: [$output, 'preprocessFlags' => PPFrame::RECOVER_ORIG];
@@ -227,7 +227,7 @@ class Riven
 		/** @var array $magicArgs */
 		/** @var array $values */
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
-		if (!ParserHelper::checkIfs($frame, $magicArgs)) {
+		if (!ParserHelper::checkIfs($magicArgs)) {
 			return '';
 		}
 
@@ -284,7 +284,7 @@ class Riven
 		/** @var array $magicArgs */
 		/** @var array $values */
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
-		if (!ParserHelper::checkIfs($frame, $magicArgs)) {
+		if (!ParserHelper::checkIfs($magicArgs)) {
 			return '';
 		}
 
@@ -348,7 +348,7 @@ class Riven
 		/** @var array $magicArgs */
 		/** @var array $values */
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
-		if (!ParserHelper::checkIfs($frame, $magicArgs)) {
+		if (!ParserHelper::checkIfs($magicArgs)) {
 			return '';
 		}
 
@@ -387,7 +387,7 @@ class Riven
 		/** @var array $magicArgs */
 		/** @var array $values */
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
-		if (count($values) <= 0 || !ParserHelper::checkIfs($frame, $magicArgs)) {
+		if (count($values) <= 0 || !ParserHelper::checkIfs($magicArgs)) {
 			return [''];
 		}
 
@@ -404,7 +404,7 @@ class Riven
 			}
 		}
 
-		$debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
+		$debug = ParserHelper::checkDebugMagic($parser, $magicArgs);
 		return ParserHelper::formatPFForDebug($output, $debug, false);
 	}
 
@@ -445,7 +445,7 @@ class Riven
 			unset($values[0]);
 		}
 
-		if ($npick <= 0 || !count($values) || !ParserHelper::checkIfs($frame, $magicArgs)) {
+		if ($npick <= 0 || !count($values) || !ParserHelper::checkIfs($magicArgs)) {
 			return '';
 		}
 
@@ -576,7 +576,7 @@ class Riven
 		/** @var array $magicArgs */
 		/** @var array $values */
 		[$magicArgs, $values] = ParserHelper::getMagicArgs($frame, $args, $magicWords);
-		if (!ParserHelper::checkIfs($frame, $magicArgs)) {
+		if (!ParserHelper::checkIfs($magicArgs)) {
 			return '';
 		}
 
@@ -593,7 +593,7 @@ class Riven
 			// Explode
 			#RHecho('Split Explode');
 			$delimiter = $magicArgs[self::NA_DELIMITER] ?? ',';
-			$orig = trim($frame->expand($magicArgs[self::NA_EXPLODE], PPFrame::RECOVER_ORIG));
+			$orig = $magicArgs[self::NA_EXPLODE]; // Used to try to expand with RECOVER_ORIG but is already expanded.
 			$values = explode($delimiter, $orig);
 		} elseif (count($values) > 2) {
 			#RHecho('Split Args');
@@ -1124,7 +1124,7 @@ class Riven
 		// show("Templates:\n", $templates);
 		$separator = ParserHelper::getSeparator($magicArgs);
 		$output = implode($separator, $templates);
-		$debug = ParserHelper::checkDebugMagic($parser, $frame, $magicArgs);
+		$debug = ParserHelper::checkDebugMagic($parser, $magicArgs);
 		return ParserHelper::formatPFForDebug($output, $debug);
 	}
 
