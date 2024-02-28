@@ -290,33 +290,10 @@ class Riven
 			return '';
 		}
 
-		// This is a bit kludgey, but the idea is that we want to avoid this being counted as expensive, possibly
-		// several times, so we first eliminate any duplicate titles, then check if they exist. Note that the
-		// elimination algorithm is naive and ~O(n^2), but the number of values is expected to always be negligible. If
-		// needed, a limiter could be added to make sure that's the case.
-		$uniqueTitles = [];
-		$titleTexts = [];
+		$linkCache = MediaWikiServices::getInstance()->getLinkCache();
 		foreach ($values as $value) {
 			$titleText = trim($frame->expand($value));
-			$title = Title::newFromText($titleText);
-			VersionHelper::getInstance()->findVariantLink($parser, $titleText, $title, true);
-			if ($title) {
-				$found = false;
-				foreach ($uniqueTitles as $unique) {
-					if ($title->equals($unique)) {
-						$found = true;
-						break;
-					}
-				}
-
-				if (!$found) {
-					$titleTexts[] = $titleText;
-				}
-			}
-		}
-
-		foreach ($titleTexts as $titleText) {
-			if (self::findTitle($parser, $titleText)) {
+			if (self::findTitle($parser, $linkCache, $titleText)) {
 				return $titleText;
 			}
 		}
@@ -355,7 +332,9 @@ class Riven
 		}
 
 		$titleText = trim($frame->expand($values[0] ?? ''));
-		$index = is_null(self::findTitle($parser, $titleText)) ? 2 : 1;
+		$linkCache = MediaWikiServices::getInstance()->getLinkCache();
+		$index = is_null(self::findTitle($parser, $linkCache, $titleText)) ? 2 : 1;
+
 		return isset($values[$index])
 			? trim($frame->expand($values[$index]))
 			: '';
@@ -394,9 +373,10 @@ class Riven
 		}
 
 		$output = '';
+		$linkCache = MediaWikiServices::getInstance()->getLinkCache();
 		foreach ($values as $titleText) {
 			$titleText = trim($frame->expand($titleText));
-			$title = self::findTitle($parser, $titleText, NS_TEMPLATE);
+			$title = self::findTitle($parser, $linkCache, $titleText, NS_TEMPLATE);
 			if (!is_null($title)) {
 				// show('Exists!');
 				$outTitle = $title->getNamespace() === NS_TEMPLATE
@@ -943,12 +923,12 @@ class Riven
 	 * @param Parser $parser The parser in use.
 	 * @param ?Title $title The title to search for.
 	 *
-	 * @return ?Title True if the file was found; otherwise, false.
+	 * @return ?Title Title if the page was found; otherwise null.
 	 */
-	private static function findTitle(Parser $parser, string $titleText, int $defaultNs = NS_MAIN): ?Title
+	private static function findTitle(Parser $parser, LinkCache $linkCache, string $titleText, int $defaultNs = NS_MAIN): ?Title
 	{
-		$helper = VersionHelper::getInstance();
 		// Derived from ParserFunctions #ifexist code.
+		$helper = VersionHelper::getInstance();
 		$title = Title::newFromText($titleText, $defaultNs);
 		$helper->findVariantLink($parser, $titleText, $title, true);
 		if (!$title || $title->isExternal()) {
@@ -958,16 +938,18 @@ class Riven
 		$ns = $title->getNamespace();
 		switch ($ns) {
 			case NS_SPECIAL:
+				// Special page check does not access database, so is never expensive.
 				return $helper->specialPageExists($title)
 					? $title
 					: null;
 			case NS_MEDIA:
+				// File existence check is always expensive.
 				return $parser->incrementExpensiveFunctionCount() && $helper->fileExists($title)
 					? $title
 					: null;
 			default:
+				// Title check is expensive only if not found in known-good or known-bad cache titles.
 				$pdbk = $title->getPrefixedDBkey();
-				$linkCache = MediaWikiServices::getInstance()->getLinkCache();
 				if ($linkCache->getGoodLinkID($pdbk)) {
 					return $title;
 				}
