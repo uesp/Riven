@@ -332,8 +332,12 @@ class Riven
 		}
 
 		$titleText = trim($frame->expand($values[0] ?? ''));
-		$linkCache = MediaWikiServices::getInstance()->getLinkCache();
-		$index = is_null(self::findTitle($parser, $linkCache, $titleText)) ? 2 : 1;
+		if ($titleText === '') {
+			$index = 2;
+		} else {
+			$linkCache = MediaWikiServices::getInstance()->getLinkCache();
+			$index = is_null(self::findTitle($parser, $linkCache, $titleText)) ? 2 : 1;
+		}
 
 		return isset($values[$index])
 			? trim($frame->expand($values[$index]))
