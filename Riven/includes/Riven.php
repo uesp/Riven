@@ -382,10 +382,18 @@ class Riven
 			$titleText = trim($frame->expand($titleText));
 			$title = self::findTitle($parser, $linkCache, $titleText, NS_TEMPLATE);
 			if (!is_null($title)) {
-				// show('Exists!');
-				$outTitle = $title->getNamespace() === NS_TEMPLATE
-					? $title->getText()
-					: $title->getPrefixedText();
+				switch ($title->getNamespace()) {
+					case NS_MAIN:
+						$outTitle = ':' . $title->getText();
+						break;
+					case NS_TEMPLATE:
+						$outTitle = $title->getText();
+						break;
+					default:
+						$outTitle = $title->getPrefixedText();
+						break;
+				}
+
 				$output .= '{{' . $outTitle . '}}';
 			}
 		}
