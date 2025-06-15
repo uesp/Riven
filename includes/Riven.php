@@ -110,7 +110,7 @@ class Riven
 
 		$retval = trim($retval);
 		switch ($modeWord) {
-				/*
+			/*
             case self::AV_RECURSIVE:
                 $retval = self::cleanSpacePP($retval, $parser, $frame, true);
                 break; */
@@ -1083,6 +1083,8 @@ class Riven
 			// Is it something that looks like an HTML tag?
 			return preg_match('#\A\s*' . self::TAG_REGEX  . '#s', $node->value);
 		}
+
+		return false; // We don't recognize the node type, so treat it as important.
 	}
 
 	/**
