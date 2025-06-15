@@ -1188,6 +1188,12 @@ class Riven
 		$separator = ParserHelper::getSeparator($magicArgs);
 		$output = implode($separator, $templates);
 		$debug = ParserHelper::checkDebugMagic($parser, $magicArgs);
+		if (!$debug) {
+			// We have to preprocess and re-expand or functions like #return inside #splitargs don't work. (Unclear exactly why, but it looks like they get expanded inside child frames instead of the current one.)
+			$dom = $parser->preprocessToDom($output);
+			$output = $frame->expand($dom);
+		}
+
 		return ParserHelper::formatPFForDebug($output, $debug);
 	}
 
