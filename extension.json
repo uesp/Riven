@@ -34,5 +34,9 @@
 		"riven-tracking-rand",
 		"riven-tracking-skinname"
 	],
+  	"CodeMirrorTagModes": {
+		"cleanspace": "text/mediawiki",
+		"cleantable": "text/mediawiki"
+	},
 	"manifest_version": 1
 }
